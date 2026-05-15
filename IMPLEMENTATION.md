@@ -21,7 +21,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S12 | Hosted chart page | done | s12 | Jinja2 templates; 3 page tests; static mount on `/static`. |
 | S13 | Embed page & CORS/CSP headers | done | s13 | `/embed/{id}` with `frame-ancestors *`; custom CORS middleware for `/api/*`. |
 | S14 | Provider base interface & direct adapter | done | s14 | Adapter Protocol; DirectAdapter; render builder dispatches through registry. |
-| S15 | Range resolver | pending | — | — |
+| S15 | Range resolver | done | s15 | 8 dedicated tests; d/w/m/y lookback, month clamp, year subtract. |
 | S16 | EODHD adapter | pending | — | — |
 | S17 | IB adapter — connection & fetch | pending | — | — |
 | S18 | IB adapter — normalization & wiring | pending | — | — |
@@ -133,6 +133,12 @@ following the steps defined in `specs/implementation_plan.md`.
 - Refactored `build_payload` to be fully async and dispatch each non-indicator series through the adapter; it now returns `(payload, warnings)` and the GET route surfaces warnings on the response.
 - Added a placeholder `range_resolver.resolve_range` raising `NotImplementedError`; full implementation lands in S15.
 - Existing 53 tests continue to pass.
+
+### S15 — Range resolver
+
+- Implemented `resolve_range` with fixed-mode ISO parsing and relative-mode d/w/m/y lookback. Month subtraction clamps day-of-month overflow (e.g. Mar 31 - 1m → Feb 28).
+- `_today()` is a module-level seam so tests can monkeypatch deterministically. 8 tests added; full suite at 61 passes.
+
 
 
 
