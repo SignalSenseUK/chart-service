@@ -195,6 +195,29 @@ following the steps defined in `specs/implementation_plan.md`.
 - Existing `tests/conftest.py` already provided shared async fixtures (`app_with_db`, `client`); no additions needed.
 - Final suite: 85 passes.
 
+## Final verification
+
+- Test suite: **85 / 85 passing** (`.venv/bin/pytest`).
+- Every step S1–S23 was committed as its own commit on `main` and pushed to `origin/main`.
+- Acceptance criteria (cross-referenced against `specs/self_hosted_chart_service_spec.md` §Acceptance Criteria):
+  1. Direct charts: create / update / soft-delete / list / get / hosted render — covered by S5/S6/S12 + tests.
+  2. EODHD provider with fixed and relative ranges — covered by S15/S16 (live calls require a real key).
+  3. IB provider via `ib_async` — covered by S17/S18 (live runs require IB Gateway).
+  4. SMA/EMA/VWAP/Bollinger computed server-side and rendered as derived series — S8/S9/S10.
+  5. PNG export via headless browser sidecar — S19/S20 (live exports require a CDP-capable browser).
+  6. Single-VPS deploy with app + Postgres + proxy + browser — S21 (`docker-compose.yml`).
+  7. No provider credentials leak to clients; structured JSON logs — S1/S22.
+  8. `GET /health` reports DB readiness — S3.
+  9. Volume preserved and rendered as a histogram — S7/S10.
+
+## Outstanding follow-ups
+
+- Live EODHD/IB and PNG export flows are mocked in CI; before production use, run a smoke test against real credentials and a running CDP browser.
+- Caddy rate-limit module (`caddy-ratelimit`) must be compiled into the proxy image before enabling the commented imports in `Caddyfile`.
+- Lightweight Charts is loaded from unpkg in `chart.html`/`embed.html`; for air-gapped deployments, vendor the JS bundle.
+- Alembic migration was hand-authored (no live DB at scaffold time). Run `alembic upgrade head` against a fresh Postgres before deployment.
+
+
 
 
 
