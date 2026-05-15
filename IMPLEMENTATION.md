@@ -24,7 +24,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S15 | Range resolver | done | s15 | 8 dedicated tests; d/w/m/y lookback, month clamp, year subtract. |
 | S16 | EODHD adapter | done | s16 | 6 adapter tests + 2 integration tests; validation fetch on create. |
 | S17 | IB adapter — connection & fetch | done | s17 | `ib_async` adapter with pacing, lock, retry/backoff; import smoke-tested. |
-| S18 | IB adapter — normalization & wiring | pending | — | — |
+| S18 | IB adapter — normalization & wiring | done | s18 | 7 IB tests with mocked client; lifespan auto-connect when IB env vars present. |
 | S19 | Browser exporter service | pending | — | — |
 | S20 | Export API route | pending | — | — |
 | S21 | Dockerfile & Docker Compose | pending | — | — |
@@ -153,6 +153,13 @@ following the steps defined in `specs/implementation_plan.md`.
 - `fetch_series` resolves date range to an IB duration string, calls `reqHistoricalDataAsync`, truncates earlier-than-requested bars, sorts ascending, and emits a warning when the earliest returned bar is later than the requested start.
 - Adapter is not yet wired into the registry/lifespan — that happens in S18 alongside normalization edge cases.
 - Outstanding: no live IB Gateway in CI, so end-to-end is exercised only via mocks in S18.
+
+### S18 — IB adapter: normalization & wiring
+
+- IB adapter was already routed through the lazy registry in S14. S18 hardens normalization (handles `BarData`-like objects via `getattr`, strips time-of-day from dates, sorts ascending, filters bars before the requested start), and confirms the validation fetch path in `chart_service.create_chart` reuses the same adapter.
+- Updated `app/main.py` lifespan to lazily connect to IB on startup when `IB_HOST`/`IB_PORT`/`IB_CLIENT_ID` are all set, and to disconnect on shutdown. Connection failure is logged but does not block app startup.
+- Added 7 IB tests (sec-type mapping, duration string, date parsing, bar normalization, contract building, missing-config rejection, end-to-end fetch through a fake IB client). Full suite at 76 passes.
+
 
 
 

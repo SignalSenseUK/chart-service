@@ -26,9 +26,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("application.startup", app_env=settings.APP_ENV)
     if settings.DATABASE_URL:
         await init_db()
+
+    ib_adapter = None
+    if settings.IB_HOST and settings.IB_PORT and settings.IB_CLIENT_ID is not None:
+        try:
+            from app.providers.ib import IbAdapter  # noqa: PLC0415
+
+            ib_adapter = IbAdapter.get_instance()
+            await ib_adapter.connect()
+            logger.info("application.ib_connected")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("application.ib_connect_failed", error=str(exc))
+
     try:
         yield
     finally:
+        if ib_adapter is not None:
+            try:
+                await ib_adapter.disconnect()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("application.ib_disconnect_failed", error=str(exc))
         if settings.DATABASE_URL:
             await close_db()
         logger.info("application.shutdown")
