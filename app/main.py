@@ -5,6 +5,7 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI
 
+from app.api.routes import health as health_routes
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
 from app.db.session import close_db, init_db
@@ -36,5 +37,7 @@ def create_app() -> FastAPI:
         description="Self-hosted chart rendering service.",
         lifespan=lifespan,
     )
+
+    app.include_router(health_routes.router)
 
     return app

@@ -9,7 +9,7 @@ following the steps defined in `specs/implementation_plan.md`.
 |------|-------|--------|--------|-------|
 | S1 | Project scaffold & config | done | s1 | FastAPI app factory boots; venv installs cleanly. |
 | S2 | Database setup & migrations | done | s2 | Alembic offline SQL renders the full schema; SQLite import test passes. |
-| S3 | ID generation & health endpoint | pending | — | — |
+| S3 | ID generation & health endpoint | done | s3 | 6 unit/integration tests passing. |
 | S4 | Pydantic request/response schemas | pending | — | — |
 | S5 | Chart CRUD routes (create + get) | pending | — | — |
 | S6 | Chart update, soft-delete, listing | pending | — | — |
@@ -49,5 +49,14 @@ following the steps defined in `specs/implementation_plan.md`.
 - Wired `init_db`/`close_db` into `app/main.py` lifespan, guarded by a configured `DATABASE_URL` so the app can still boot in dev without a database.
 - Verified `alembic upgrade head --sql` renders the expected Postgres schema; verified `Base.metadata.create_all` works against SQLite for tests.
 - Outstanding: real-Postgres apply will happen in the deployment step (S21+). No Alembic autogenerate run because there is no live DB; migration is hand-authored.
+
+### S3 — ID generation & health endpoint
+
+- Added `app/core/ids.py` (`generate_chart_id`) using `secrets.choice` over a 64-char URL-safe alphabet.
+- Added `app/api/routes/health.py` with `GET /health` returning 200/`ok` on success and 503/`degraded` on DB failure.
+- Wired the health router into `create_app()`.
+- Added `tests/conftest.py` with an in-memory SQLite-backed FastAPI fixture (dependency override on `get_db`), plus `tests/test_ids.py` and `tests/test_health.py`.
+- `pytest -q` reports 6 passes.
+
 
 
