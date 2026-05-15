@@ -23,7 +23,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S14 | Provider base interface & direct adapter | done | s14 | Adapter Protocol; DirectAdapter; render builder dispatches through registry. |
 | S15 | Range resolver | done | s15 | 8 dedicated tests; d/w/m/y lookback, month clamp, year subtract. |
 | S16 | EODHD adapter | done | s16 | 6 adapter tests + 2 integration tests; validation fetch on create. |
-| S17 | IB adapter — connection & fetch | pending | — | — |
+| S17 | IB adapter — connection & fetch | done | s17 | `ib_async` adapter with pacing, lock, retry/backoff; import smoke-tested. |
 | S18 | IB adapter — normalization & wiring | pending | — | — |
 | S19 | Browser exporter service | pending | — | — |
 | S20 | Export API route | pending | — | — |
@@ -145,6 +145,15 @@ following the steps defined in `specs/implementation_plan.md`.
 - Validation fetch added to `chart_service.create_chart` for any non-direct source: range is resolved, adapter is called, and an empty result is rejected with `provider_empty`/422.
 - 6 EODHD unit tests using mocked transports plus 2 integration tests covering create-with-validation and provider-empty rejection. Suite at 69 passes.
 - Outstanding: real EODHD calls are not exercised in CI; a smoke test against a sandbox key can be added later if desired.
+
+### S17 — IB adapter: connection & fetch
+
+- Added `app/providers/ib.py` with `IbAdapter` implementing the `MarketDataAdapter` protocol on top of `ib_async`. Holds a persistent connection, reconnects with exponential backoff (1 → 30s, 5 attempts), serializes historical requests via `asyncio.Lock`, and enforces a 1s pacing gap between fetches.
+- Builds a `Contract` from `provider_config` (`secType`, `exchange`, `currency`, etc.) with sensible defaults derived from `asset_class`.
+- `fetch_series` resolves date range to an IB duration string, calls `reqHistoricalDataAsync`, truncates earlier-than-requested bars, sorts ascending, and emits a warning when the earliest returned bar is later than the requested start.
+- Adapter is not yet wired into the registry/lifespan — that happens in S18 alongside normalization edge cases.
+- Outstanding: no live IB Gateway in CI, so end-to-end is exercised only via mocks in S18.
+
 
 
 
