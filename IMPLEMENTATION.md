@@ -10,7 +10,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S1 | Project scaffold & config | done | s1 | FastAPI app factory boots; venv installs cleanly. |
 | S2 | Database setup & migrations | done | s2 | Alembic offline SQL renders the full schema; SQLite import test passes. |
 | S3 | ID generation & health endpoint | done | s3 | 6 unit/integration tests passing. |
-| S4 | Pydantic request/response schemas | pending | — | — |
+| S4 | Pydantic request/response schemas | done | s4 | 14 tests passing including discriminated range, source-mode rules, indicator wiring. |
 | S5 | Chart CRUD routes (create + get) | pending | — | — |
 | S6 | Chart update, soft-delete, listing | pending | — | — |
 | S7 | Normalization service | pending | — | — |
@@ -57,6 +57,14 @@ following the steps defined in `specs/implementation_plan.md`.
 - Wired the health router into `create_app()`.
 - Added `tests/conftest.py` with an in-memory SQLite-backed FastAPI fixture (dependency override on `get_db`), plus `tests/test_ids.py` and `tests/test_health.py`.
 - `pytest -q` reports 6 passes.
+
+### S4 — Pydantic request/response schemas
+
+- Added `app/domain/schemas/chart_request.py` with discriminated `FixedRange`/`RelativeRange`, source/instrument/view/layout/style/indicator/series models, `schema_version` default `1`, and a model validator that enforces direct-vs-provider rules, max 50k data points, series-id uniqueness, and indicator source linkage.
+- Added `app/domain/schemas/chart_response.py` with create/list/error response models.
+- Added `app/domain/schemas/normalized_payload.py` (`PayloadMeta`, `PayloadSeries`, `NormalizedChartPayload`, `ChartGetResponse`).
+- Added `tests/test_chart_schemas.py` covering the cross-field rules. `pytest -q` reports 14 passes.
+
 
 
 
