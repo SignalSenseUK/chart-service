@@ -2,72 +2,85 @@
 
 ## Overview
 
-This specification defines a self-hosted web service that accepts chart data and chart configuration, persists chart definitions, and renders financial charts using TradingView Lightweight Charts in hosted and embeddable web pages.[cite:4][cite:44] The system is intended primarily as an internal tool, but the codebase and operational model must be production-quality and suitable for release as a deploy-it-yourself open source project.[cite:39][cite:44]
+This specification defines a self-hosted web service that accepts chart data and chart configuration, persists chart definitions, and renders financial charts using TradingView Lightweight Charts in hosted and embeddable web pages. The system is intended primarily as an internal tool, but the codebase and operational model must be production-quality and suitable for release as a deploy-it-yourself open source project.
 
-The service must support two data acquisition modes: direct data submission and provider-backed retrieval.[cite:26][cite:37] In direct mode, the caller sends data inline as JSON arrays or pandas-style records; in provider-backed mode, the caller submits a provider query definition and the service fetches latest data on demand from EODHD or Interactive Brokers via IB Gateway and `ib_async`.[cite:26][cite:37][cite:7]
+The service must support two data acquisition modes: direct data submission and provider-backed retrieval. In direct mode, the caller sends data inline as JSON arrays or pandas-style records; in provider-backed mode, the caller submits a provider query definition and the service fetches latest data on demand from EODHD or Interactive Brokers via IB Gateway and `ib_async`.
 
-The primary output of the system is a hosted chart URL and a stripped-down embeddable chart URL backed by a persisted chart definition keyed by a short opaque identifier.[cite:49][cite:55] A synchronous PNG export endpoint must also be supported using caller-supplied width and height parameters and Playwright-based screenshot capture.[cite:28][cite:30]
+The primary output of the system is a hosted chart URL and a stripped-down embeddable chart URL backed by a persisted chart definition keyed by a short opaque identifier. A synchronous PNG export endpoint must also be supported using caller-supplied width and height parameters and Playwright-based screenshot capture.
 
-The system is intentionally narrow in scope for version 1. It is not a full charting workstation, multi-user SaaS, trading terminal, or streaming data platform.[cite:4][cite:37] Version 1 focuses on durable chart definitions, on-demand data retrieval, deterministic indicator generation, responsive hosted rendering, and a simple deployment target consisting of a single VPS, Postgres, and a Python web service.[cite:39][cite:44]
+The system is intentionally narrow in scope for version 1. It is not a full charting workstation, multi-user SaaS, trading terminal, or streaming data platform. Version 1 focuses on durable chart definitions, on-demand data retrieval, deterministic indicator generation, responsive hosted rendering, and a simple deployment target consisting of a single VPS, Postgres, and a Python web service.
+
+## Terminology
+
+- **Chart definition**: The canonical high-level request body persisted as JSONB. This is the source of truth for what a chart is.
+- **Normalized payload**: The backend-generated render contract consumed by the frontend renderer. This is an ephemeral, computed artifact derived from the chart definition and source data.
+- **Inline data / direct data**: Market data submitted by the caller as part of the chart creation request and persisted with the chart definition.
+- **Provider-backed data**: Market data fetched on demand from an external provider (EODHD or IB) at render time rather than persisted.
+- **Series**: A single data stream within a chart, either raw input data (e.g., candlestick OHLCV) or a derived indicator (e.g., SMA line).
+- **Pane**: A vertically stacked chart area. Version 1 implements single-pane rendering but the schema supports multiple panes for forward compatibility.
+- **Chart ID**: A short, opaque, URL-safe, non-sequential identifier for a persisted chart.
 
 ## Goals and non-goals
 
 ### Goals
 
-- Accept a high-level chart request over HTTP and persist it under a short non-sequential chart ID.[cite:49][cite:55]
-- Support direct input data using JSON arrays and pandas-style record objects.[cite:4]
-- Support provider-backed retrieval from EODHD end-of-day history and IB historical bars through a modular adapter layer.[cite:26][cite:37][cite:7]
-- Render charts in a hosted web page and an embeddable iframe-friendly page using TradingView Lightweight Charts.[cite:4]
-- Regenerate provider-backed charts on demand using latest available data rather than persisting provider market data snapshots.[cite:26][cite:37]
-- Persist chart definitions indefinitely in Postgres using flexible JSONB-backed storage for semi-structured configuration payloads.[cite:44][cite:43]
-- Support server-side indicators in version 1: SMA, EMA, VWAP, and Bollinger Bands.[cite:4]
-- Expose a synchronous PNG export endpoint using Playwright screenshots at caller-supplied dimensions.[cite:28][cite:30]
-- Provide responsive mobile-friendly viewing, with “good viewing on mobile” as the target rather than advanced mobile UX.[cite:4]
-- Be deployable on a single VPS with structured logs and minimal operational complexity.[cite:39][cite:44]
+- Accept a high-level chart request over HTTP and persist it under a short non-sequential chart ID.
+- Support direct input data using JSON arrays and pandas-style record objects.
+- Support provider-backed retrieval from EODHD end-of-day history and IB historical bars through a modular adapter layer.
+- Render charts in a hosted web page and an embeddable iframe-friendly page using TradingView Lightweight Charts.
+- Regenerate provider-backed charts on demand using latest available data rather than persisting provider market data snapshots.
+- Persist chart definitions indefinitely in Postgres using flexible JSONB-backed storage for semi-structured configuration payloads.
+- Support server-side indicators in version 1: SMA, EMA, VWAP, and Bollinger Bands.
+- Expose a synchronous PNG export endpoint using headless browser screenshots at caller-supplied dimensions.
+- Provide responsive mobile-friendly viewing, with “good viewing on mobile” as the target rather than advanced mobile UX.
+- Be deployable on a single VPS with structured logs and minimal operational complexity.
+- Expose a health check endpoint for operational readiness monitoring.
+- Support chart update and soft-delete for basic lifecycle management.
+- Support paginated internal chart listing for operational use.
 
 ### Non-goals
 
-- No application-level user accounts, tenant separation, billing, or quotas in version 1.[cite:39]
-- No order placement, broker account data, positions, or live trading workflows.[cite:37]
-- No streaming quotes, websockets, or real-time subscriptions in version 1.[cite:37]
-- No chart layout persistence beyond the stored chart definition itself; there are no user workspaces or dashboards in version 1.[cite:44]
-- No exchange calendar logic, premarket/after-hours session filtering, or market-hours semantics in version 1.[cite:37]
-- No provider failover or multi-provider routing logic.[cite:26][cite:37]
-- No public search, discovery, or listing of charts.[cite:49]
-- No caching strategy beyond optional short-lived normalized payload reuse inside the application process.[cite:44]
+- No application-level user accounts, tenant separation, billing, or quotas in version 1.
+- No order placement, broker account data, positions, or live trading workflows.
+- No streaming quotes, websockets, or real-time subscriptions in version 1.
+- No chart layout persistence beyond the stored chart definition itself; there are no user workspaces or dashboards in version 1.
+- No exchange calendar logic, premarket/after-hours session filtering, or market-hours semantics in version 1.
+- No provider failover or multi-provider routing logic.
+- No public search, discovery, or listing of charts. A private paginated listing endpoint is in scope for operational use.
+- No caching strategy beyond optional short-lived normalized payload reuse inside the application process.
 
 ## System context
 
-The system serves anonymous internet-accessible chart URLs and embed URLs while keeping all provider credentials server-side.[cite:26][cite:37] Chart definitions are durable application records in Postgres and are identified by opaque, non-numeric, URL-safe IDs that are hard to guess but are not treated as secrets or authorization tokens.[cite:44][cite:49][cite:55]
+The system serves anonymous internet-accessible chart URLs and embed URLs while keeping all provider credentials server-side. Chart definitions are durable application records in Postgres and are identified by opaque, non-numeric, URL-safe IDs that are hard to guess but are not treated as secrets or authorization tokens.
 
-The rendering engine is browser-based because TradingView Lightweight Charts is a client-side HTML5 canvas charting library designed to create chart instances and attach series data in the browser.[cite:4] The backend is responsible for input validation, provider integration, data normalization, indicator calculation, persistence, and image export orchestration.[cite:39][cite:44][cite:28]
+The rendering engine is browser-based because TradingView Lightweight Charts is a client-side HTML5 canvas charting library designed to create chart instances and attach series data in the browser. The backend is responsible for input validation, provider integration, data normalization, indicator calculation, persistence, and image export orchestration.
 
 ## Functional requirements
 
 ### FR-1 Chart creation
 
-The service shall expose an HTTP endpoint that accepts a chart creation request, validates it, persists the chart definition, and returns a chart ID plus absolute URLs for hosted viewing, embedding, and API retrieval.[cite:39][cite:44]
+The service shall expose an HTTP endpoint that accepts a chart creation request, validates it, persists the chart definition, and returns a chart ID plus absolute URLs for hosted viewing, embedding, and API retrieval.
 
 The service shall support two chart source modes:
 
-- `direct`: inline input data is included in the request and persisted with the chart definition.[cite:4]
-- `provider`: the request includes provider configuration and range definition, and the service refetches latest data whenever the chart is rendered or exported.[cite:26][cite:37]
+- `direct`: inline input data is included in the request and persisted with the chart definition.
+- `provider`: the request includes provider configuration and range definition, and the service refetches latest data whenever the chart is rendered or exported.
 
 ### FR-2 Chart retrieval
 
-The service shall expose an API endpoint that resolves a chart ID to its current normalized chart payload and metadata.[cite:44] If the chart is direct-backed, the service shall normalize persisted inline data into the frontend payload.[cite:4] If the chart is provider-backed, the service shall resolve the saved range and query the provider adapter for current data before generating the payload.[cite:26][cite:37]
+The service shall expose an API endpoint that resolves a chart ID to its current normalized chart payload and metadata. If the chart is direct-backed, the service shall normalize persisted inline data into the frontend payload. If the chart is provider-backed, the service shall resolve the saved range and query the provider adapter for current data before generating the payload.
 
 ### FR-3 Hosted chart page
 
-The service shall expose a human-viewable hosted chart page at `/charts/{id}` that loads the chart definition by ID and renders it in a minimal responsive page using TradingView Lightweight Charts.[cite:4] The hosted page may include only the simplest chrome required for context, such as title and optional legend, because the product direction favors simplicity over a feature-rich workstation interface.[cite:4]
+The service shall expose a human-viewable hosted chart page at `/charts/{id}` that loads the chart definition by ID and renders it in a minimal responsive page using TradingView Lightweight Charts. The hosted page may include only the simplest chrome required for context, such as title and optional legend, because the product direction favors simplicity over a feature-rich workstation interface.
 
 ### FR-4 Embed page
 
-The service shall expose an iframe-oriented page at `/embed/{id}` that renders the same chart content with stripped-down page chrome suitable for embedding in other sites or internal tools.[cite:4] The embed page shall share the same backend resolution path as the hosted page and differ primarily in presentation.[cite:4]
+The service shall expose an iframe-oriented page at `/embed/{id}` that renders the same chart content with stripped-down page chrome suitable for embedding in other sites or internal tools. The embed page shall share the same backend resolution path as the hosted page and differ primarily in presentation.
 
 ### FR-5 PNG export
 
-The service shall expose a synchronous PNG export endpoint for an existing chart ID using caller-supplied width and height parameters.[cite:28][cite:30] The implementation shall render a chart page at the requested dimensions and capture a screenshot using Playwright’s screenshot API.[cite:28][cite:30]
+The service shall expose a synchronous PNG export endpoint for an existing chart ID using caller-supplied width and height parameters. The implementation shall render a chart page at the requested dimensions and capture a screenshot using Playwright’s screenshot API.
 
 ### FR-6 Indicator support
 
@@ -78,11 +91,11 @@ The backend shall compute the following indicators in version 1 when requested i
 - Volume Weighted Average Price (VWAP)
 - Bollinger Bands
 
-Indicator outputs shall be represented as derived series in the normalized payload so that hosted render, embed render, and PNG export remain consistent.[cite:4]
+Indicator outputs shall be represented as derived series in the normalized payload so that hosted render, embed render, and PNG export remain consistent.
 
 ### FR-7 Range support
 
-The chart specification shall support both fixed and rolling range semantics for provider-backed charts.[cite:26][cite:37]
+The chart specification shall support both fixed and rolling range semantics for provider-backed charts.
 
 A fixed range shall specify explicit ISO dates:
 
@@ -108,37 +121,61 @@ A rolling range shall specify a relative lookback ending at the current time:
 }
 ```
 
-The service shall resolve both forms into provider-native query parameters at request time.[cite:26][cite:37]
+The service shall resolve both forms into provider-native query parameters at request time.
 
 ### FR-8 Time format handling
 
-Caller-provided timestamps in version 1 shall be accepted as ISO date strings only.[cite:62][cite:65] The normalization layer shall convert those values into the date representation expected by Lightweight Charts for daily-series data.[cite:62][cite:65]
+Caller-provided timestamps in version 1 shall be accepted as ISO date strings in `YYYY-MM-DD` format only. Datetime strings with time components shall be rejected. The normalization layer shall convert those values into the date representation expected by Lightweight Charts for daily-series data.
 
 ### FR-9 Multi-series and pane forward compatibility
 
-The schema shall support multiple series from day one, and each series shall include a `pane` field.[cite:4] Version 1 runtime behavior may implement one-pane rendering first, but the contract must not prevent future expansion to multiple panes, since Lightweight Charts documents pane support as a first-class concept.[cite:16][cite:17]
+The schema shall support multiple series from day one, and each series shall include a `pane` field. Version 1 runtime behavior may implement one-pane rendering first, but the contract must not prevent future expansion to multiple panes, since Lightweight Charts documents pane support as a first-class concept.
+
+### FR-10 Chart update
+
+The service shall expose an endpoint to update a chart definition for an existing chart ID. Updates may modify the title, view configuration, layout, series definitions, or inline data. The `updated_at` timestamp shall be set on every successful update.
+
+### FR-11 Chart soft-delete
+
+The service shall expose an endpoint to soft-delete a chart by setting a `deleted_at` timestamp. Soft-deleted charts shall not be returned by listing endpoints and shall return `410 Gone` on direct access via view, embed, API retrieval, or export endpoints.
+
+### FR-12 Chart listing
+
+The service shall expose a paginated listing endpoint for charts. The endpoint shall support cursor-based or offset pagination, ordering by `created_at` descending, and filtering by `source_kind`. Soft-deleted charts shall be excluded from listing results.
+
+### FR-13 Health check
+
+The service shall expose a `GET /health` endpoint that returns `200 OK` with a JSON body indicating application and database readiness. This endpoint shall be used by Docker Compose health checks and reverse proxy upstream monitoring.
+
+### FR-14 Volume series
+
+Volume data shall be preserved through normalization and included in the normalized payload. Version 1 shall render volume as a histogram series in a separate pane below the price chart. The volume histogram shall use the `Histogram` series type from Lightweight Charts. VWAP indicator computation depends on volume data being present in the source series.
 
 ## Non-functional requirements
 
 ### NFR-1 Maintainability
 
-The codebase shall be organized as a modular Python application with separate concerns for API routing, domain models, provider adapters, data normalization, rendering translation, export logic, and persistence.[cite:39][cite:44]
+The codebase shall be organized as a modular Python application with separate concerns for API routing, domain models, provider adapters, data normalization, rendering translation, export logic, and persistence.
 
 ### NFR-2 Deployability
 
-The system shall be deployable to a single VPS using Docker Compose with three services: application, Postgres, and reverse proxy.[cite:39][cite:44]
+The system shall be deployable to a single VPS using Docker Compose with four services: application, Postgres, reverse proxy, and headless browser for PNG export.
 
 ### NFR-3 Performance
 
-The system shall support direct chart rendering and API retrieval for approximately 25 years of daily data per series, which is on the order of several thousand bars and is practical for browser rendering and JSON transport when payload shape is kept compact.[cite:4] PNG export shall aim for synchronous behavior under normal load, subject to bounded dimensions and timeouts.[cite:28][cite:30]
+The system shall support direct chart rendering and API retrieval for approximately 25 years of daily data per series, which is on the order of several thousand bars and is practical for browser rendering and JSON transport when payload shape is kept compact. PNG export shall aim for synchronous behavior under normal load, subject to bounded dimensions and timeouts.
 
 ### NFR-4 Security
 
-The service shall keep provider credentials entirely server-side and shall not embed credentials in chart URLs, frontend code, or public payloads.[cite:26][cite:37] The service shall use opaque non-sequential IDs and request-size/rate controls, but chart URLs are not considered authenticated resources in version 1.[cite:49][cite:55]
+The service shall keep provider credentials entirely server-side and shall not embed credentials in chart URLs, frontend code, or public payloads. The service shall use opaque non-sequential IDs and request-size/rate controls, but chart URLs are not considered authenticated resources in version 1.
 
 ### NFR-5 Observability
 
-The service shall emit structured JSON logs sufficient for operational troubleshooting.[cite:39] No metrics or tracing stack is required in version 1.[cite:39]
+The service shall emit structured JSON logs sufficient for operational troubleshooting. No metrics or tracing stack is required in version 1.
+
+### NFR-6 CORS and embedding policy
+
+The embed page at `/embed/{id}` shall set `Content-Security-Policy: frame-ancestors *` to allow cross-origin iframe embedding. API routes under `/api/` shall set `Access-Control-Allow-Origin: *` to permit cross-origin API consumption. The hosted chart page at `/charts/{id}` may use default same-origin framing policy.
 
 ## Architecture
 
@@ -146,66 +183,70 @@ The service shall emit structured JSON logs sufficient for operational troublesh
 
 The system consists of the following major components:
 
-1. FastAPI HTTP application for API routes, page routes, and static asset delivery.[cite:39]
-2. Postgres database for durable chart definitions and related metadata.[cite:44]
-3. Provider adapter layer for direct input, EODHD, and IB historical bars.[cite:26][cite:37][cite:7]
-4. Normalization and indicator engine that converts source data into a canonical internal representation.[cite:4]
-5. Frontend renderer pages built around TradingView Lightweight Charts.[cite:4]
-6. Playwright export service for PNG generation.[cite:28][cite:30]
-7. Reverse proxy (Nginx or Caddy) for TLS termination, compression, and rate limiting.[cite:39]
+1. FastAPI HTTP application for API routes, page routes, and static asset delivery.
+2. Postgres database for durable chart definitions and related metadata.
+3. Provider adapter layer for direct input, EODHD, and IB historical bars.
+4. Normalization and indicator engine that converts source data into a canonical internal representation.
+5. Frontend renderer pages built around TradingView Lightweight Charts.
+6. Headless browser sidecar for PNG export via Chrome DevTools Protocol.
+7. Reverse proxy (Caddy recommended for automatic TLS, or Nginx) for TLS termination, compression, and rate limiting.
 
 ### Request flow: chart creation
 
-1. Client sends `POST /api/charts` with a high-level chart definition.[cite:39]
-2. Backend validates the payload using Pydantic models.[cite:39]
-3. Backend generates a short opaque chart ID.[cite:49][cite:55]
-4. Backend persists the canonical chart definition in Postgres JSONB columns.[cite:44][cite:43]
-5. Backend returns chart URLs and metadata.[cite:39]
+1. Client sends `POST /api/charts` with a high-level chart definition.
+2. Backend validates the payload using Pydantic models.
+3. For provider-backed charts, backend performs a validation fetch to confirm the provider can resolve the symbol and range. If the validation fetch fails, the request is rejected with a `422` error describing the provider failure.
+4. Backend generates a short opaque chart ID.
+5. Backend persists the canonical chart definition in Postgres JSONB columns.
+6. Backend returns chart URLs and metadata.
 
 ### Request flow: chart view or embed
 
-1. Browser requests `/charts/{id}` or `/embed/{id}`.[cite:4]
-2. Backend resolves the chart definition from Postgres by ID.[cite:44]
-3. Backend either uses inline data or calls the relevant provider adapter for latest source data.[cite:26][cite:37]
-4. Backend normalizes data, computes derived indicator series, and produces a normalized chart payload.[cite:4]
-5. Frontend page loads the payload and renders the chart with TradingView Lightweight Charts.[cite:4]
+1. Browser requests `/charts/{id}` or `/embed/{id}`.
+2. Backend resolves the chart definition from Postgres by ID.
+3. Backend either uses inline data or calls the relevant provider adapter for latest source data.
+4. Backend normalizes data, computes derived indicator series, and produces a normalized chart payload.
+5. Frontend page loads the payload and renders the chart with TradingView Lightweight Charts.
 
 ### Request flow: PNG export
 
-1. Client requests `/api/charts/{id}/png?width=...&height=...`.[cite:28]
-2. Backend validates chart existence and dimensions.[cite:28]
-3. Backend constructs an internal render URL for the chart in export mode.[cite:28][cite:30]
-4. Playwright loads the page and waits for a ready signal from the frontend renderer.[cite:28][cite:30]
-5. Playwright captures a screenshot of the chart container and returns `image/png` synchronously.[cite:28][cite:30]
+1. Client requests `/api/charts/{id}/png?width=...&height=...`.
+2. Backend validates chart existence and dimensions.
+3. Backend constructs an internal render URL for the chart in export mode.
+4. Backend connects to the headless browser sidecar via `EXPORT_BROWSER_WS_ENDPOINT` using Playwright's `connect_over_cdp` and loads the render URL.
+5. The browser waits for the chart-ready signal (see FR-5 and Frontend Rendering Contract).
+6. The browser captures a screenshot of the chart container and returns `image/png` synchronously to the caller.
 
 ## Technology choices
 
 ### Backend
 
 - Python 3.12 or current supported Python 3.x LTS runtime
-- FastAPI for HTTP APIs and page serving.[cite:39]
-- Pydantic v2 for schema validation and serialization.[cite:39]
-- SQLAlchemy 2.x async stack with `asyncpg` for Postgres access.[cite:58]
-- Alembic for schema migrations.[cite:58]
+- FastAPI for HTTP APIs and page serving.
+- Pydantic v2 for schema validation and serialization.
+- SQLAlchemy 2.x async stack with `asyncpg` for Postgres access.
+- Alembic for schema migrations.
 
 ### Database
 
-- PostgreSQL as the primary and only database in version 1.[cite:44]
-- JSONB columns for chart definitions and flexible metadata.[cite:44][cite:43]
+- PostgreSQL as the primary and only database in version 1.
+- JSONB columns for chart definitions and flexible metadata.
 
 ### Frontend
 
-- Minimal HTML/CSS/JavaScript frontend served as static assets by the application or reverse proxy.[cite:39]
-- TradingView Lightweight Charts as the rendering library.[cite:4]
+- Minimal HTML/CSS/JavaScript frontend served as static assets by the application or reverse proxy.
+- TradingView Lightweight Charts v4.x (`lightweight-charts@^4.0`) as the rendering library. Version 4 is required for forward-compatible multi-pane support.
 
 ### Export
 
-- Playwright Python for headless browser screenshot generation.[cite:28][cite:30]
+- A headless Chromium browser running as a Docker Compose sidecar service (e.g., `browserless/chrome` or `chromium` image) exposing a Chrome DevTools Protocol (CDP) websocket endpoint.
+- Playwright Python as the client library to connect to the remote browser via `EXPORT_BROWSER_WS_ENDPOINT`. The application container does not install Chromium locally.
+- This architecture keeps the application container lightweight (~200 MB vs ~1.2 GB with bundled Chromium) and isolates browser resource consumption.
 
 ### Provider libraries
 
-- Standard HTTP client for EODHD requests against end-of-day historical endpoints.[cite:26]
-- `ib_async` for Interactive Brokers historical data access via remote IB Gateway.[cite:7]
+- Standard HTTP client for EODHD requests against end-of-day historical endpoints.
+- `ib_async` for Interactive Brokers historical data access via remote IB Gateway.
 
 ## Domain model
 
@@ -213,24 +254,27 @@ The system consists of the following major components:
 
 #### Chart
 
-A persisted chart definition addressed by a short opaque ID.[cite:44][cite:49]
+A persisted chart definition addressed by a short opaque ID.
 
 Fields:
 - `id: str`
 - `created_at: datetime`
 - `updated_at: datetime`
+- `deleted_at: Optional[datetime]`
 - `source_kind: str`
 - `title: Optional[str]`
-- `instrument_meta: dict`
 - `chart_definition: dict`
-- `normalized_payload: Optional[dict]`
 - `inline_series: Optional[dict]`
 - `last_rendered_at: Optional[datetime]`
 - `last_exported_at: Optional[datetime]`
 
+Notes:
+- `normalized_payload` is not persisted. It is an ephemeral computed artifact derived from the chart definition and source data at request time. Caching, if needed in future, should use a separate cache layer rather than the source-of-truth table.
+- Instrument metadata (symbol, asset class, label) is stored within `chart_definition.instrument` and is not promoted to a separate column. The GIN index on `chart_definition` supports instrument-based queries.
+
 #### ChartDefinition
 
-The canonical high-level request body persisted as JSONB.[cite:44]
+The canonical high-level request body persisted as JSONB.
 
 Substructures:
 - `source`
@@ -243,7 +287,7 @@ Substructures:
 
 #### NormalizedChartPayload
 
-The backend-generated render contract consumed by the frontend renderer.[cite:4]
+The backend-generated render contract consumed by the frontend renderer.
 
 Substructures:
 - `meta`
@@ -263,11 +307,10 @@ create table charts (
   id text primary key,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  source_kind text not null,
+  deleted_at timestamptz null,
+  source_kind text not null check (source_kind in ('direct', 'eodhd', 'ib')),
   title text null,
-  instrument_meta jsonb not null,
   chart_definition jsonb not null,
-  normalized_payload jsonb null,
   inline_series jsonb null,
   last_rendered_at timestamptz null,
   last_exported_at timestamptz null
@@ -280,31 +323,44 @@ Recommended indexes:
 create index idx_charts_created_at on charts (created_at desc);
 create index idx_charts_source_kind on charts (source_kind);
 create index idx_charts_chart_definition_gin on charts using gin (chart_definition);
-create index idx_charts_instrument_meta_gin on charts using gin (instrument_meta);
+create index idx_charts_deleted_at on charts (deleted_at) where deleted_at is null;
 ```
 
-PostgreSQL JSONB is appropriate here because the chart definition is semistructured, likely to evolve, and benefits from native JSON operators and indexing.[cite:44][cite:43]
+PostgreSQL JSONB is appropriate here because the chart definition is semistructured, likely to evolve, and benefits from native JSON operators and indexing.
+
+### JSONB schema versioning
+
+The `chart_definition` JSONB payload shall include a top-level `schema_version` field (integer, starting at `1`). Schema changes to the chart definition structure shall follow an additive-only policy in version 1 — new fields may be added with defaults, but existing fields shall not be renamed or removed. If a breaking change is required in a future version, the application shall include a migration function that upgrades old definitions on read.
 
 ### Persistence policy
 
-- Charts live forever unless manually deleted in a future administrative tool.[cite:44]
-- Direct charts persist inline data in `inline_series`.[cite:44]
-- Provider-backed charts do not persist fetched market data by default.[cite:26][cite:37]
-- `normalized_payload` is optional and may be treated as a rebuildable optimization artifact rather than a source of truth.[cite:44]
+- Charts live forever unless soft-deleted via the delete endpoint.
+- Soft-deleted charts retain their data in the database but are excluded from listing and return `410 Gone` on direct access.
+- Direct charts persist inline data in `inline_series`.
+- Provider-backed charts do not persist fetched market data by default.
+- The normalized payload is not persisted. It is computed on demand from the chart definition and source data.
 
 ## ID generation
 
-Chart IDs shall be short, opaque, URL-safe, and non-sequential.[cite:49][cite:55] The implementation may use a Nano ID-inspired alphabet and entropy model even if the exact implementation is in Python rather than JavaScript.[cite:49][cite:55]
+Chart IDs shall be short, opaque, URL-safe, and non-sequential. The implementation may use a Nano ID-inspired alphabet and entropy model even if the exact implementation is in Python rather than JavaScript.
 
 Requirements:
-- Minimum entropy sufficient to avoid practical guessing through enumeration.[cite:49][cite:55]
+- Minimum entropy sufficient to avoid practical guessing through enumeration.
 - URL-safe alphabet.
 - No numeric autoincrement IDs exposed publicly.
 - Stable length for consistent URL appearance.
 
-Recommended default: 16 to 21 URL-safe characters.[cite:49][cite:55]
+Recommended default: 16 to 21 URL-safe characters.
 
 ## API specification
+
+### Content types
+
+All API request bodies shall use `Content-Type: application/json`. API responses shall use `Content-Type: application/json` unless otherwise noted. PNG export responses shall use `Content-Type: image/png`. Hosted and embed page responses shall use `Content-Type: text/html`.
+
+### Inline data limits
+
+Direct chart creation requests shall be limited to a maximum of 50,000 data points per series and a maximum request body size of 10 MB at the application level. The reverse proxy should enforce a lower body size limit (e.g., 5 MB) as a first line of defense.
 
 ### 1. Create chart
 
@@ -344,7 +400,7 @@ Recommended default: 16 to 21 URL-safe characters.[cite:49][cite:55]
   "series": [
     {
       "id": "price",
-      "kind": "candlestick",
+      "type": "candlestick",
       "pane": 0,
       "data_format": "ohlcv",
       "data": [
@@ -353,7 +409,7 @@ Recommended default: 16 to 21 URL-safe characters.[cite:49][cite:55]
     },
     {
       "id": "ema20",
-      "kind": "line",
+      "type": "line",
       "pane": 0,
       "indicator": {
         "name": "ema",
@@ -377,11 +433,12 @@ Recommended default: 16 to 21 URL-safe characters.[cite:49][cite:55]
 ```
 
 Validation rules:
-- `source.kind` must be one of `direct`, `eodhd`, `ib`.[cite:26][cite:37]
-- Direct charts must include inline data for at least one non-derived series.[cite:4]
-- Provider charts must not include inline market data as authoritative source data.[cite:26][cite:37]
-- Dates must be ISO date strings.[cite:62][cite:65]
-- Width and height are not supplied at creation time because export dimensions are caller-specified per export request.[cite:28]
+- `source.kind` must be one of `direct`, `eodhd`, `ib`.
+- Direct charts must include inline data for at least one non-derived series.
+- Provider charts must not include inline market data as authoritative source data.
+- Dates must be ISO date strings in `YYYY-MM-DD` format.
+- Width and height are not supplied at creation time because export dimensions are caller-specified per export request.
+- Maximum 50,000 data points per series for inline data.
 
 ### 2. Get chart payload
 
@@ -412,7 +469,7 @@ Validation rules:
 }
 ```
 
-If the chart is provider-backed, the service shall fetch latest source data before returning the payload.[cite:26][cite:37]
+If the chart is provider-backed, the service shall fetch latest source data before returning the payload.
 
 ### 3. Hosted chart page
 
@@ -421,11 +478,16 @@ If the chart is provider-backed, the service shall fetch latest source data befo
 **Purpose**: Render a minimal full page chart.
 
 Requirements:
-- Responsive layout.[cite:4]
+- Responsive layout.
 - Minimal wrapper UI.
 - SEO is not required.
 - Page shall fetch the resolved payload from `/api/charts/{id}` or receive it server-side.
-- Page shall emit a “chart ready” signal for export workflows.[cite:28][cite:30]
+- Page shall emit a "chart ready" signal for export workflows.
+
+Error states:
+- `404`: Chart not found — display a minimal "chart not found" page.
+- Provider fetch failure — display a minimal error message in place of the chart.
+- Empty data — display the chart chrome with a "no data available" message.
 
 ### 4. Embed chart page
 
@@ -434,7 +496,7 @@ Requirements:
 **Purpose**: Render a minimal iframe-safe chart view.
 
 Requirements:
-- Same chart rendering logic as hosted page.[cite:4]
+- Same chart rendering logic as hosted page.
 - Reduced chrome and margins.
 - Stable height behavior and responsive width.
 - No interactive toolbar beyond what is easiest to implement.
@@ -443,12 +505,12 @@ Requirements:
 
 **Route**: `GET /api/charts/{id}/png?width={w}&height={h}`
 
-**Purpose**: Return a PNG image of the chart at requested dimensions.[cite:28][cite:30]
+**Purpose**: Return a PNG image of the chart at requested dimensions.
 
 Validation:
 - Width and height required.
 - Width and height must be integers.
-- Width and height must fall within configured safe bounds to prevent abuse.[cite:28]
+- Width and height must fall within configured safe bounds to prevent abuse.
 
 Recommended bounds:
 - minimum width: 320
@@ -459,7 +521,86 @@ Recommended bounds:
 Error behavior:
 - `404` if chart not found.
 - `422` if dimensions invalid.
-- `504` or `500` if export times out or rendering fails.[cite:28][cite:30]
+- `504` or `500` if export times out or rendering fails.
+
+The response shall include `Cache-Control: no-store` to prevent stale PNG caching for provider-backed charts.
+
+### 6. List charts
+
+**Route**: `GET /api/charts?page=1&limit=20&source_kind=direct`
+
+**Purpose**: Return a paginated list of charts for operational use.
+
+**Response shape**:
+
+```json
+{
+  "charts": [
+    {
+      "id": "p9VdX7qQk2RtA1mB",
+      "title": "SPY Daily",
+      "source_kind": "direct",
+      "created_at": "2026-05-14T12:00:00Z",
+      "updated_at": "2026-05-14T12:00:00Z"
+    }
+  ],
+  "total": 42,
+  "page": 1,
+  "limit": 20
+}
+```
+
+Rules:
+- Default page size: 20, maximum page size: 100.
+- Soft-deleted charts are excluded.
+- Results ordered by `created_at` descending.
+- Optional `source_kind` filter.
+
+### 7. Update chart
+
+**Route**: `PUT /api/charts/{id}`
+
+**Purpose**: Replace the chart definition for an existing chart.
+
+**Request body**: Same shape as the create endpoint.
+
+**Response**: Same shape as the create endpoint, with updated URLs.
+
+Rules:
+- `source_kind` may not be changed (e.g., a direct chart cannot be converted to a provider chart).
+- `updated_at` is set to current time on success.
+- Returns `404` if the chart does not exist or is soft-deleted.
+
+### 8. Delete chart
+
+**Route**: `DELETE /api/charts/{id}`
+
+**Purpose**: Soft-delete a chart.
+
+**Response**: `204 No Content` on success.
+
+Rules:
+- Sets `deleted_at` to current time.
+- Returns `404` if the chart does not exist.
+- Returns `410 Gone` if the chart is already deleted.
+
+### 9. Health check
+
+**Route**: `GET /health`
+
+**Purpose**: Report application and database readiness.
+
+**Response**:
+
+```json
+{
+  "status": "ok",
+  "database": "connected",
+  "version": "1.0.0"
+}
+```
+
+Returns `200 OK` when healthy, `503 Service Unavailable` when the database is unreachable.
 
 ## Input schema details
 
@@ -476,9 +617,9 @@ Error behavior:
 ```
 
 Rules:
-- `direct` uses inline data and ignores provider config.[cite:4]
-- `eodhd` requires provider identifiers and date resolution fields appropriate to EOD historical retrieval.[cite:26]
-- `ib` requires provider config sufficient to resolve the contract externally and request historical bars through `ib_async`.[cite:7][cite:37]
+- `direct` uses inline data and ignores provider config.
+- `eodhd` requires provider identifiers and date resolution fields appropriate to EOD historical retrieval.
+- `ib` requires provider config sufficient to resolve the contract externally and request historical bars through `ib_async`.
 
 ### Range model
 
@@ -507,9 +648,9 @@ Rules:
 ```
 
 Rules:
-- Both range modes are supported for provider-backed charts.[cite:26][cite:37]
-- Direct charts may include range for metadata, but inline data remains authoritative.[cite:4]
-- `lookback` must parse into a supported relative duration unit such as `d`, `w`, `m`, or `y`.[cite:37]
+- Both range modes are supported for provider-backed charts.
+- Direct charts may include range for metadata, but inline data remains authoritative.
+- `lookback` must parse into a supported relative duration unit such as `d`, `w`, `m`, or `y`.
 
 ### Instrument model
 
@@ -524,8 +665,8 @@ Rules:
 ```
 
 Rules:
-- The system stores the symbol as provided in the chart config.[cite:26][cite:37]
-- For provider-backed charts, the provider adapter is responsible for interpreting the symbol according to provider rules.[cite:26][cite:37]
+- The system stores the symbol as provided in the chart config.
+- For provider-backed charts, the provider adapter is responsible for interpreting the symbol according to provider rules.
 
 ### View model
 
@@ -554,18 +695,22 @@ Rules:
 ```
 
 Rules:
-- Runtime may implement only `single` in version 1 while still accepting a pane index field per series.[cite:16][cite:17]
+- Runtime may implement only `single` in version 1 while still accepting a pane index field per series.
 
 ### Series model
 
-Each series entry may represent raw input data or a derived indicator series.
+Each series entry may represent raw input data or a derived indicator series. The series `type` field uses the same vocabulary in both input and output schemas.
+
+Valid `type` values: `candlestick`, `line`, `area`, `histogram`, `bar`.
+
+Valid `data_format` values: `ohlcv` (open/high/low/close/volume), `ohlc` (no volume), `value` (single numeric value per timestamp).
 
 Raw series example:
 
 ```json
 {
   "id": "price",
-  "kind": "candlestick",
+  "type": "candlestick",
   "pane": 0,
   "data_format": "ohlcv",
   "data": [
@@ -579,7 +724,7 @@ Derived series example:
 ```json
 {
   "id": "bb_upper",
-  "kind": "line",
+  "type": "line",
   "pane": 0,
   "indicator": {
     "name": "bollinger",
@@ -593,7 +738,7 @@ Derived series example:
 
 Required fields:
 - `id`
-- `kind`
+- `type`
 - `pane`
 
 Optional fields depending on role:
@@ -603,9 +748,31 @@ Optional fields depending on role:
 - `style`
 - `label`
 
+### Series style model
+
+The optional `style` field controls visual presentation of a series. All fields are optional and fall back to Lightweight Charts defaults when omitted.
+
+```json
+{
+  "style": {
+    "color": "#2962FF",
+    "line_width": 2,
+    "opacity": 1.0,
+    "up_color": "#26a69a",
+    "down_color": "#ef5350"
+  }
+}
+```
+
+Rules:
+- `color` applies to line and area series.
+- `up_color` and `down_color` apply to candlestick and bar series.
+- `line_width` applies to line series (integer, 1-4).
+- `opacity` applies to all series types (float, 0.0-1.0).
+
 ## Normalized internal data model
 
-The backend shall normalize all source data into canonical internal bar/value records before rendering translation.[cite:4]
+The backend shall normalize all source data into canonical internal bar/value records before rendering translation.
 
 ### Canonical OHLCV bar
 
@@ -630,14 +797,14 @@ The backend shall normalize all source data into canonical internal bar/value re
 ```
 
 Normalization rules:
-- Sort all rows by ascending date before indicator computation and frontend serialization.[cite:4]
-- Reject duplicate dates within a series unless a future override policy is introduced.[cite:4]
+- Sort all rows by ascending date before indicator computation and frontend serialization.
+- Reject duplicate dates within a series unless a future override policy is introduced.
 - Coerce numeric fields to floats/ints as appropriate.
 - Preserve input symbol metadata separately from time-series rows.
 
 ## Frontend rendering contract
 
-The frontend should consume a compact normalized payload that maps directly onto Lightweight Charts’ series model.[cite:4]
+The frontend should consume a compact normalized payload that maps directly onto Lightweight Charts’ series model.
 
 Recommended shape:
 
@@ -673,12 +840,22 @@ Recommended shape:
 ```
 
 Frontend responsibilities:
-- Create chart instance.[cite:4]
-- Apply theme and layout options.[cite:4]
-- Add series by type.[cite:4]
-- Set series data.[cite:4]
-- Resize responsively.[cite:4]
-- Emit a ready signal when first render completes for export coordination.[cite:28][cite:30]
+- Create chart instance.
+- Apply theme and layout options.
+- Add series by type.
+- Set series data.
+- Resize responsively.
+- Emit a chart-ready signal when first render completes for export coordination.
+
+### Chart-ready signal contract
+
+The frontend renderer shall signal rendering completion by setting the `data-chart-ready` attribute on the `<body>` element to `"true"`:
+
+```javascript
+document.body.dataset.chartReady = 'true';
+```
+
+The export service shall wait for this attribute before capturing the screenshot. The recommended polling strategy is `page.wait_for_selector('body[data-chart-ready="true"]')` with a configurable timeout (default: `EXPORT_TIMEOUT_MS`).
 
 ## Indicator engine requirements
 
@@ -692,7 +869,7 @@ Compute exponential moving average over the configured source series close or va
 
 ### VWAP
 
-Compute volume-weighted average price for OHLCV-capable source series. The default implementation shall use cumulative VWAP over the returned dataset in version 1 unless a session-reset policy is added later.[cite:4]
+Compute volume-weighted average price for OHLCV-capable source series. The default implementation shall use cumulative VWAP over the returned dataset in version 1 unless a session-reset policy is added later.
 
 ### Bollinger Bands
 
@@ -700,8 +877,8 @@ Compute middle band, upper band, and lower band from the configured source serie
 
 Indicator requirements:
 - Derived series must inherit timestamps from the source series after warm-up periods.
-- Missing early values may be omitted or represented as gaps; the policy must be consistent across indicators.[cite:4]
-- Indicators shall be computed server-side in version 1 so all render targets receive identical results.[cite:4]
+- Missing early values may be omitted or represented as gaps; the policy must be consistent across indicators.
+- Indicators shall be computed server-side in version 1 so all render targets receive identical results.
 
 ## Provider adapter specification
 
@@ -720,41 +897,58 @@ class MarketDataAdapter(Protocol):
 Purpose:
 - Validate inline input rows.
 - Normalize data into canonical internal representation.
-- Persist inline series for future regeneration.[cite:4]
+- Persist inline series for future regeneration.
 
 ### EODHD adapter
 
 Scope:
-- End-of-day historical data only in version 1.[cite:26]
+- End-of-day historical data only in version 1.
 
 Requirements:
 - Accept symbol and resolved date range.
-- Call the EOD historical endpoint using server-side credentials.[cite:26]
+- Call the EOD historical endpoint using server-side credentials.
 - Normalize returned rows into canonical OHLCV or value series.
-- Never expose the provider token to clients.[cite:26]
+- Never expose the provider token to clients.
 
 ### IB adapter
 
 Scope:
-- Historical bars only in version 1 via remote IB Gateway using `ib_async`.[cite:7][cite:37]
+- Historical bars only in version 1 via remote IB Gateway using `ib_async`.
 
 Requirements:
-- Accept already-resolved contract information or equivalent provider config sufficient for retrieval.[cite:7]
-- Respect historical data pacing and request-size limits documented by Interactive Brokers.[cite:37]
-- Enforce guardrails on range size and repeated requests.[cite:37]
+- Accept already-resolved contract information or equivalent provider config sufficient for retrieval.
+- Respect historical data pacing and request-size limits documented by Interactive Brokers.
+- Enforce guardrails on range size and repeated requests.
 - Normalize returned bars into canonical series.
+
+Connection lifecycle:
+- The application shall maintain a single persistent `ib_async` connection to the configured IB Gateway.
+- If the connection drops, the adapter shall attempt automatic reconnection with exponential backoff.
+- Only one historical data request shall be in-flight at a time per client ID, in accordance with IB Gateway limits.
+- The `IB_CLIENT_ID` environment variable must be unique per application instance to avoid conflicts when multiple instances connect to the same gateway.
+
+### Provider policies
+
+The following policies apply to all provider adapters:
+
+**Timeouts**: Each provider fetch shall be subject to a configurable timeout (`EODHD_TIMEOUT_MS`, `IB_TIMEOUT_MS`). Default: 30,000 ms.
+
+**Retries**: Version 1 shall not retry failed provider requests. All provider failures are immediately surfaced to the caller as `502 Bad Gateway`.
+
+**Partial data**: If a provider returns data for a shorter range than requested (e.g., ticker listed after the requested start date), the chart shall render the available data as-is. The API response may include a `warnings` array noting the discrepancy.
 
 ## Error handling
 
-The API shall use JSON error responses for API routes and simple human-readable fallback text or minimal error pages for hosted/embed routes.[cite:39]
+The API shall use JSON error responses for API routes and simple human-readable fallback text or minimal error pages for hosted/embed routes.
 
 Recommended error categories:
 - `400 Bad Request`: malformed input body.
 - `404 Not Found`: unknown chart ID.
 - `409 Conflict`: duplicate conflicting series IDs within a chart definition.
-- `422 Unprocessable Entity`: semantic validation failure such as invalid range, missing inline data, or unsupported indicator config.[cite:39]
-- `502 Bad Gateway`: provider failure from EODHD or IB Gateway.[cite:26][cite:37]
-- `504 Gateway Timeout`: export or provider request timeout.[cite:28][cite:37]
+- `410 Gone`: chart has been soft-deleted.
+- `422 Unprocessable Entity`: semantic validation failure such as invalid range, missing inline data, unsupported indicator config, or provider validation failure at chart creation.
+- `502 Bad Gateway`: provider failure from EODHD or IB Gateway.
+- `504 Gateway Timeout`: export or provider request timeout.
 
 Error response shape:
 
@@ -769,17 +963,17 @@ Error response shape:
 
 ## Security requirements
 
-The service is anonymously readable, but it still requires baseline hardening because provider-backed charts can trigger upstream data requests.[cite:26][cite:37]
+The service is anonymously readable, but it still requires baseline hardening because provider-backed charts can trigger upstream data requests.
 
 Required controls:
-- Provider credentials stored only in server environment configuration.[cite:26][cite:37]
-- Request body size limits at reverse proxy and application level.[cite:39]
-- Export dimension limits to prevent oversized screenshot abuse.[cite:28]
-- Basic IP-based rate limiting at the reverse proxy for chart creation and export endpoints.[cite:39]
-- Strict input validation for chart creation payloads.[cite:39]
-- No stack traces or credential-bearing error messages in public responses.[cite:39]
+- Provider credentials stored only in server environment configuration.
+- Request body size limits at reverse proxy and application level.
+- Export dimension limits to prevent oversized screenshot abuse.
+- Basic IP-based rate limiting at the reverse proxy for chart creation and export endpoints.
+- Strict input validation for chart creation payloads.
+- No stack traces or credential-bearing error messages in public responses.
 
-The chart ID is an identifier, not an authentication boundary.[cite:49][cite:55] Any possession of a valid URL implies read access in version 1.[cite:49][cite:55]
+The chart ID is an identifier, not an authentication boundary. Any possession of a valid URL implies read access in version 1.
 
 ## Logging and observability
 
@@ -790,12 +984,12 @@ Structured JSON logs shall be emitted for:
 - provider fetches
 - export attempts
 - error conditions
-- duration measurements for provider fetch, normalization, render, and export stages.[cite:39]
+- duration measurements for provider fetch, normalization, render, and export stages.
 
 Suggested log fields:
 - `timestamp`
 - `level`
-- `request_id`
+- `request_id` — generated as a UUID v4 per incoming request, or extracted from an `X-Request-ID` header if provided by the caller or reverse proxy.
 - `route`
 - `chart_id`
 - `source_kind`
@@ -811,9 +1005,10 @@ Suggested log fields:
 Single VPS deployment with Docker Compose.
 
 Services:
-- `app`
-- `postgres`
-- `proxy`
+- `app` — Python application container (~200 MB, no Chromium)
+- `postgres` — PostgreSQL database
+- `proxy` — Caddy (recommended) or Nginx reverse proxy
+- `browser` — headless Chromium sidecar (e.g., `browserless/chrome` or `zenika/alpine-chrome`) for PNG export via CDP websocket
 
 ### Reverse proxy responsibilities
 
@@ -821,29 +1016,36 @@ Services:
 - Gzip or Brotli compression.
 - Rate limiting for expensive routes.
 - Static asset caching headers where appropriate.
-- Forwarding real client IP information to the app.[cite:39]
+- Forwarding real client IP information to the app.
 
 ### Environment variables
 
 Required application configuration:
-- `DATABASE_URL`
-- `BASE_URL`
-- `APP_ENV`
-- `LOG_LEVEL`
+- `DATABASE_URL` — format: `postgresql+asyncpg://user:pass@host:port/dbname`
+- `BASE_URL` — public base URL for generating chart URLs (e.g., `https://charts.example.com`)
+- `APP_ENV` — one of `development`, `staging`, `production`
+- `LOG_LEVEL` — one of `DEBUG`, `INFO`, `WARNING`, `ERROR`
 - `EODHD_API_KEY`
+- `EODHD_TIMEOUT_MS` — default: `30000`
 - `IB_HOST`
 - `IB_PORT`
 - `IB_CLIENT_ID`
-- `EXPORT_BROWSER_WS_ENDPOINT` or local browser settings
-- `EXPORT_TIMEOUT_MS`
-- `PNG_MIN_WIDTH`
-- `PNG_MIN_HEIGHT`
-- `PNG_MAX_WIDTH`
-- `PNG_MAX_HEIGHT`
+- `IB_TIMEOUT_MS` — default: `30000`
+- `EXPORT_BROWSER_WS_ENDPOINT` — CDP websocket URL of the browser sidecar (e.g., `ws://browser:3000`)
+- `EXPORT_TIMEOUT_MS` — default: `15000`
+- `PNG_MIN_WIDTH` — default: `320`
+- `PNG_MIN_HEIGHT` — default: `200`
+- `PNG_MAX_WIDTH` — default: `2400`
+- `PNG_MAX_HEIGHT` — default: `1600`
+- `DB_POOL_SIZE` — default: `5`
+- `DB_MAX_OVERFLOW` — default: `10`
 
 ### Backup and recovery
 
-Because charts live forever, database backups are required operationally even in version 1.[cite:44] A daily logical backup of Postgres is sufficient initially.[cite:44]
+Because charts live forever (unless soft-deleted), database backups are required operationally even in version 1. Recommended setup:
+- A cron job running `pg_dump --format=custom` daily to a local volume or S3-compatible object store.
+- Retention policy: 7 daily backups + 4 weekly backups.
+- Backup verification: periodic restore to a temporary database to confirm backup integrity.
 
 ## Suggested project structure
 
@@ -880,7 +1082,7 @@ app/
     eodhd.py
     ib.py
   exports/
-    playwright_exporter.py
+    browser_exporter.py
   web/
     static/
       charts.js
@@ -895,56 +1097,61 @@ app/
 
 ### Phase 1: Foundation
 
-- Set up FastAPI app, config, logging, database session management, and migrations.[cite:39][cite:58]
-- Create `charts` table.[cite:44]
-- Implement opaque ID generation.[cite:49][cite:55]
-- Implement `POST /api/charts` and `GET /api/charts/{id}` for direct charts only.[cite:39]
+- Set up FastAPI app, config, logging, database session management, and migrations.
+- Create `charts` table with soft-delete support.
+- Implement opaque ID generation.
+- Implement `POST /api/charts`, `GET /api/charts/{id}`, `PUT /api/charts/{id}`, `DELETE /api/charts/{id}`, and `GET /api/charts` (listing) for direct charts only.
+- Implement `GET /health` endpoint.
 
 ### Phase 2: Frontend rendering
 
-- Build minimal hosted page and embed page.[cite:4]
-- Implement normalized payload rendering with Lightweight Charts.[cite:4]
-- Add responsive layout and chart-ready signal.[cite:28][cite:30]
+- Build minimal hosted page and embed page.
+- Implement normalized payload rendering with Lightweight Charts.
+- Add responsive layout and chart-ready signal.
 
 ### Phase 3: Indicators
 
-- Implement SMA, EMA, VWAP, and Bollinger calculations.[cite:4]
-- Add derived-series materialization to payload builder.[cite:4]
+- Implement SMA, EMA, VWAP, and Bollinger calculations.
+- Add derived-series materialization to payload builder.
 
 ### Phase 4: EODHD provider
 
-- Implement provider adapter and range resolution for fixed and relative modes.[cite:26]
-- Add provider-backed chart creation and retrieval.[cite:26]
+- Implement provider adapter and range resolution for fixed and relative modes.
+- Add provider-backed chart creation and retrieval.
 
 ### Phase 5: IB provider
 
-- Implement historical bar adapter using `ib_async`.[cite:7]
-- Add request guardrails and pacing-aware limits.[cite:37]
+- Implement historical bar adapter using `ib_async`.
+- Add request guardrails and pacing-aware limits.
 
 ### Phase 6: PNG export
 
-- Build Playwright exporter with synchronous response path.[cite:28][cite:30]
-- Validate width/height bounds and timeout handling.[cite:28]
+- Configure headless browser sidecar in Docker Compose.
+- Build browser exporter connecting to sidecar via CDP websocket.
+- Implement chart-ready signal contract.
+- Validate width/height bounds and timeout handling.
 
 ### Phase 7: Hardening
 
-- Add proxy rate limits, request size limits, and operational docs.[cite:39]
-- Add basic smoke tests for chart create/view/export flows.[cite:39]
+- Add proxy rate limits, request size limits, and operational docs.
+- Add basic smoke tests for chart create/view/export flows.
 
 ## Acceptance criteria
 
 The implementation shall be considered complete for version 1 when all of the following are true:
 
-1. A direct-data chart can be created, stored in Postgres, retrieved by opaque chart ID, and rendered in both hosted and embed pages.[cite:44][cite:4]
-2. A provider-backed EODHD chart can be created with fixed or relative range semantics and renders using latest fetched data.[cite:26]
-3. A provider-backed IB historical chart can be created and rendered against a remote IB Gateway through `ib_async`, with documented limitations and guardrails.[cite:7][cite:37]
-4. Requested indicators SMA, EMA, VWAP, and Bollinger are computed server-side and displayed correctly as derived series.[cite:4]
-5. `GET /api/charts/{id}/png` returns a PNG image synchronously for valid dimensions under normal operating conditions.[cite:28][cite:30]
-6. The application deploys successfully on a single VPS with Docker Compose, Postgres, and a reverse proxy.[cite:39][cite:44]
-7. The service exposes no provider credentials to clients and emits structured JSON logs for core operations.[cite:26][cite:39]
+1. A direct-data chart can be created, updated, soft-deleted, listed, stored in Postgres, retrieved by opaque chart ID, and rendered in both hosted and embed pages.
+2. A provider-backed EODHD chart can be created with fixed or relative range semantics and renders using latest fetched data.
+3. A provider-backed IB historical chart can be created and rendered against a remote IB Gateway through `ib_async`, with documented limitations and guardrails.
+4. Requested indicators SMA, EMA, VWAP, and Bollinger are computed server-side and displayed correctly as derived series.
+5. `GET /api/charts/{id}/png` returns a PNG image synchronously for valid dimensions under normal operating conditions, using the headless browser sidecar.
+6. The application deploys successfully on a single VPS with Docker Compose, Postgres, reverse proxy, and headless browser sidecar.
+7. The service exposes no provider credentials to clients and emits structured JSON logs for core operations.
+8. `GET /health` returns application and database readiness status.
+9. Volume data is preserved and rendered as a histogram series.
 
 ## Open implementation notes
 
-The specification intentionally leaves some engineering choices to the implementation team while constraining behavior and interfaces sufficiently to avoid ambiguity.[cite:39][cite:44] Acceptable implementation-level decisions include whether frontend payloads are fetched client-side or server-rendered into the HTML, whether `normalized_payload` is persisted eagerly or lazily, and whether the application uses server-side templates or static HTML plus JSON API for the page shell.[cite:39][cite:44]
+The specification intentionally leaves some engineering choices to the implementation team while constraining behavior and interfaces sufficiently to avoid ambiguity. Acceptable implementation-level decisions include whether frontend payloads are fetched client-side or server-rendered into the HTML, and whether the application uses server-side templates or static HTML plus JSON API for the page shell.
 
-The implementation team should favor the simplest solution that preserves the public contract, because the product’s value in version 1 comes from a stable chart definition model, reliable provider abstraction, and a minimal deployable system rather than UI sophistication.[cite:4][cite:44]
+The implementation team should favor the simplest solution that preserves the public contract, because the product's value in version 1 comes from a stable chart definition model, reliable provider abstraction, and a minimal deployable system rather than UI sophistication.
