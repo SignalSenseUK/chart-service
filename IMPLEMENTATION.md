@@ -12,7 +12,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S3 | ID generation & health endpoint | done | s3 | 6 unit/integration tests passing. |
 | S4 | Pydantic request/response schemas | done | s4 | 14 tests passing including discriminated range, source-mode rules, indicator wiring. |
 | S5 | Chart CRUD routes (create + get) | done | s5 | 18 tests passing; `POST /api/charts` and `GET /api/charts/{id}` wired with dependency-injected DB. |
-| S6 | Chart update, soft-delete, listing | pending | — | — |
+| S6 | Chart update, soft-delete, listing | done | s6 | 25 tests passing; PUT/DELETE/GET list endpoints with pagination + filter. |
 | S7 | Normalization service | pending | — | — |
 | S8 | Indicator engine — SMA & EMA | pending | — | — |
 | S9 | Indicator engine — VWAP & Bollinger | pending | — | — |
@@ -73,6 +73,15 @@ following the steps defined in `specs/implementation_plan.md`.
 - Added `app/api/routes/charts.py` with `POST /api/charts` (returns view/embed/api URLs from `BASE_URL`) and `GET /api/charts/{id}` (raw definition + inline series; render-payload pipeline lands in S10).
 - Wired error handlers and chart router into `app/main.py`.
 - Added `tests/test_chart_crud.py` with positive/negative create/get coverage. Sidestepped the `HTTP_422_UNPROCESSABLE_ENTITY` deprecation by using the literal `422`. Suite is at 18 passing tests.
+
+### S6 — Chart update, soft-delete, listing
+
+- Added `PUT /api/charts/{id}`, `DELETE /api/charts/{id}` (204), and `GET /api/charts?page&limit&source_kind` routes.
+- Relaxed `SeriesInput` cross-field rule so provider charts may omit both inline data and an indicator; instead, `ChartCreateRequest` enforces "direct ⇒ inline data" and "provider ⇒ no inline data + range required". This was discovered when writing the update test that swaps to an `eodhd` source.
+- Tightened direct-chart rule to require inline data on every non-indicator series.
+- Made the pagination test order-agnostic to dodge same-microsecond timestamp ties on SQLite.
+- 25 tests passing.
+
 
 
 

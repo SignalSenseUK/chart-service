@@ -152,10 +152,6 @@ class SeriesInput(BaseModel):
 
     @model_validator(mode="after")
     def _check_role(self) -> "SeriesInput":
-        if self.data is None and self.indicator is None:
-            raise ValueError(
-                "series must include either inline 'data' or an 'indicator' config"
-            )
         if self.data is not None and self.indicator is not None:
             raise ValueError(
                 "series cannot include both inline 'data' and 'indicator'"
@@ -189,10 +185,15 @@ class ChartCreateRequest(BaseModel):
 
         if self.source.kind == "direct":
             non_indicator = [s for s in self.series if s.indicator is None]
-            if not any(s.data for s in non_indicator):
+            if not non_indicator or not any(s.data for s in non_indicator):
                 raise ValueError(
                     "direct charts require at least one non-indicator series with inline data"
                 )
+            for s in non_indicator:
+                if s.data is None:
+                    raise ValueError(
+                        f"non-indicator series '{s.id}' in a direct chart must include inline data"
+                    )
         else:
             if any(s.data is not None for s in self.series):
                 raise ValueError(
