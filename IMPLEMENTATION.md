@@ -15,7 +15,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S6 | Chart update, soft-delete, listing | done | s6 | 25 tests passing; PUT/DELETE/GET list endpoints with pagination + filter. |
 | S7 | Normalization service | done | s7 | 8 dedicated tests; sort/coerce/dup-reject + volume histogram extraction with up/down coloring. |
 | S8 | Indicator engine — SMA & EMA | done | s8 | 7 dedicated tests; rolling SMA, EMA with SMA seed, dispatcher. |
-| S9 | Indicator engine — VWAP & Bollinger | pending | — | — |
+| S9 | Indicator engine — VWAP & Bollinger | done | s9 | 5 added indicator tests; cumulative VWAP and Bollinger upper/middle/lower with population stddev. |
 | S10 | Render-payload builder | pending | — | — |
 | S11 | Static assets & JS renderer | pending | — | — |
 | S12 | Hosted chart page | pending | — | — |
@@ -92,6 +92,12 @@ following the steps defined in `specs/implementation_plan.md`.
 - Added `app/domain/services/indicator_service.py` with `compute_sma`, `compute_ema`, and a `compute_indicator` dispatcher. Both calculators omit warm-up points and run in O(n) using a rolling-sum trick for SMA and a recursive EMA formula seeded by SMA.
 - `_series_value` allows indicators to consume either OHLC bars or value bars (falls back to the `value` field).
 - 7 indicator tests added. Full suite now at 40 passes.
+
+### S9 — Indicator engine: VWAP & Bollinger
+
+- Extended `indicator_service.py` with `compute_vwap` (cumulative typical*volume/volume; raises if any bar is missing OHLCV fields) and `compute_bollinger` (population stddev over the rolling window, selectable band).
+- Dispatcher updated to route `vwap` and `bollinger`. Suite now at 45 passes.
+
 
 
 
