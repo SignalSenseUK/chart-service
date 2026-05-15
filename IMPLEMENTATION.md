@@ -20,7 +20,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S11 | Static assets & JS renderer | done | s11 | charts.js + charts.css; node --check passes; chart-ready signal wired. |
 | S12 | Hosted chart page | done | s12 | Jinja2 templates; 3 page tests; static mount on `/static`. |
 | S13 | Embed page & CORS/CSP headers | done | s13 | `/embed/{id}` with `frame-ancestors *`; custom CORS middleware for `/api/*`. |
-| S14 | Provider base interface & direct adapter | pending | — | — |
+| S14 | Provider base interface & direct adapter | done | s14 | Adapter Protocol; DirectAdapter; render builder dispatches through registry. |
 | S15 | Range resolver | pending | — | — |
 | S16 | EODHD adapter | pending | — | — |
 | S17 | IB adapter — connection & fetch | pending | — | — |
@@ -125,6 +125,15 @@ following the steps defined in `specs/implementation_plan.md`.
 - Added `embed.html` (no title bar) and `GET /embed/{id}` route that returns `Content-Security-Policy: frame-ancestors *`.
 - Implemented a small `ApiCORSMiddleware` that only fires for `/api/*` (sets `Access-Control-Allow-Origin: *` and answers preflight `OPTIONS`). Hosted/embed pages remain same-origin by default.
 - Tests cover both header contracts and verify the hosted page does not get the CORS header. Suite at 53 passes.
+
+### S14 — Provider base interface & direct adapter
+
+- Added `app/providers/base.py` with `ProviderRequest`, `ProviderSeriesResult`, `ProviderHealth`, and `MarketDataAdapter` Protocol.
+- Added `app/providers/direct.py` (validates + normalizes inline data via `normalize_series`) and `app/providers/registry.py` with lazy `get_adapter()` (EODHD and IB are imported inside the function so missing dependencies do not break direct flows).
+- Refactored `build_payload` to be fully async and dispatch each non-indicator series through the adapter; it now returns `(payload, warnings)` and the GET route surfaces warnings on the response.
+- Added a placeholder `range_resolver.resolve_range` raising `NotImplementedError`; full implementation lands in S15.
+- Existing 53 tests continue to pass.
+
 
 
 

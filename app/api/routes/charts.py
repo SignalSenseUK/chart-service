@@ -73,7 +73,7 @@ async def get_chart(
     db: AsyncSession = Depends(db_session),
 ) -> ChartGetResponse:
     chart = await chart_service.get_chart(db, chart_id)
-    payload = await render_payload_service.build_payload(chart)
+    payload, warnings = await render_payload_service.build_payload(chart)
     await chart_service.touch_rendered(db, chart)
     instrument = (chart.chart_definition or {}).get("instrument", {}) or {}
     return ChartGetResponse(
@@ -82,6 +82,7 @@ async def get_chart(
         source_kind=chart.source_kind,
         instrument=instrument,
         payload=payload,
+        warnings=warnings,
     )
 
 
