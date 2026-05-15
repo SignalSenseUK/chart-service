@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal, Optional
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,6 +14,17 @@ class Settings(BaseSettings):
         extra="ignore",
         case_sensitive=False,
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _empty_str_to_none(cls, values: dict) -> dict:
+        """Convert empty-string env vars to None so Optional[int] fields
+        don't fail validation when the .env has e.g. ``IB_PORT=``."""
+        if isinstance(values, dict):
+            for key, value in values.items():
+                if isinstance(value, str) and value.strip() == "":
+                    values[key] = None
+        return values
 
     DATABASE_URL: str = Field(
         default="",
