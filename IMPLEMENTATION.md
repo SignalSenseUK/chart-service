@@ -8,7 +8,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | Step | Title | Status | Commit | Notes |
 |------|-------|--------|--------|-------|
 | S1 | Project scaffold & config | done | s1 | FastAPI app factory boots; venv installs cleanly. |
-| S2 | Database setup & migrations | pending | — | — |
+| S2 | Database setup & migrations | done | s2 | Alembic offline SQL renders the full schema; SQLite import test passes. |
 | S3 | ID generation & health endpoint | pending | — | — |
 | S4 | Pydantic request/response schemas | pending | — | — |
 | S5 | Chart CRUD routes (create + get) | pending | — | — |
@@ -40,4 +40,14 @@ following the steps defined in `specs/implementation_plan.md`.
 - Implemented `app/main.py` with `create_app()` factory and lifespan stub.
 - Confirmed `.venv/bin/python -c "from app.main import create_app; create_app()"` succeeds.
 - Outstanding: no DB wiring yet (planned in S2); `ib_async` and `playwright` are included up-front to avoid later requirement churn but their browser/IB Gateway dependencies are deferred.
+
+### S2 — Database setup & migrations
+
+- Added `app/db/session.py` with lazy async engine, sessionmaker, `get_db` dependency, and `init_db`/`close_db` lifecycle helpers.
+- Added `app/db/models.py` with `Chart` model and a `_JsonB` type decorator that uses JSONB on Postgres and JSON elsewhere (keeps SQLite test paths usable).
+- Set up Alembic (`alembic.ini`, `app/db/migrations/env.py`, `script.py.mako`, hand-written `0001_initial_charts` revision) including all four indexes from the spec.
+- Wired `init_db`/`close_db` into `app/main.py` lifespan, guarded by a configured `DATABASE_URL` so the app can still boot in dev without a database.
+- Verified `alembic upgrade head --sql` renders the expected Postgres schema; verified `Base.metadata.create_all` works against SQLite for tests.
+- Outstanding: real-Postgres apply will happen in the deployment step (S21+). No Alembic autogenerate run because there is no live DB; migration is hand-authored.
+
 

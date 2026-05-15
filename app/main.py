@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
+from app.db.session import close_db, init_db
 
 
 @asynccontextmanager
@@ -15,9 +16,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging(settings.LOG_LEVEL)
     logger = get_logger("app.lifespan")
     logger.info("application.startup", app_env=settings.APP_ENV)
+    if settings.DATABASE_URL:
+        await init_db()
     try:
         yield
     finally:
+        if settings.DATABASE_URL:
+            await close_db()
         logger.info("application.shutdown")
 
 
