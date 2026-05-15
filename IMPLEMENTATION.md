@@ -18,7 +18,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S9 | Indicator engine — VWAP & Bollinger | done | s9 | 5 added indicator tests; cumulative VWAP and Bollinger upper/middle/lower with population stddev. |
 | S10 | Render-payload builder | done | s10 | Builder normalizes, computes indicators, emits volume histogram, and updates last_rendered_at. |
 | S11 | Static assets & JS renderer | done | s11 | charts.js + charts.css; node --check passes; chart-ready signal wired. |
-| S12 | Hosted chart page | pending | — | — |
+| S12 | Hosted chart page | done | s12 | Jinja2 templates; 3 page tests; static mount on `/static`. |
 | S13 | Embed page & CORS/CSP headers | pending | — | — |
 | S14 | Provider base interface & direct adapter | pending | — | — |
 | S15 | Range resolver | pending | — | — |
@@ -112,6 +112,14 @@ following the steps defined in `specs/implementation_plan.md`.
 - Added `app/web/static/charts.css` with full-viewport flex layout, error overlay styling, and `body.embed`/`body.export-mode` overrides for chrome stripping.
 - Verified syntax with `node --check`.
 - Outstanding: visual rendering will be exercised in S12 (hosted page) and S19 (Playwright export).
+
+### S12 — Hosted chart page
+
+- Added Jinja2 templates `chart.html` (loads Lightweight Charts from unpkg) and `error.html` (used for 404/410).
+- Added `app/api/routes/pages.py` with `GET /charts/{id}` plus a shared `_render_chart_page` helper that handles 404/410.
+- Mounted `/static` in `create_app` so `charts.js`/`charts.css` are served by the app.
+- Tests cover the 200/404/410 paths. Full suite at 49 passes.
+
 
 
 

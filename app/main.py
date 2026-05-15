@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.api.errors import register_error_handlers
 from app.api.routes import charts as charts_routes
 from app.api.routes import health as health_routes
+from app.api.routes import pages as page_routes
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
 from app.db.session import close_db, init_db
@@ -43,5 +46,10 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
     app.include_router(health_routes.router)
     app.include_router(charts_routes.router)
+    app.include_router(page_routes.router)
+
+    static_dir = Path(__file__).resolve().parent / "web" / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     return app
