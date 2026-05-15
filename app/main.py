@@ -4,10 +4,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
+import uuid
+
+import structlog
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from app.api.errors import register_error_handlers
 from app.api.routes import charts as charts_routes
@@ -52,6 +55,41 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("application.shutdown")
 
 
+_MAX_BODY_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+        structlog.contextvars.bind_contextvars(request_id=request_id, path=request.url.path)
+        try:
+            response = await call_next(request)
+        finally:
+            structlog.contextvars.unbind_contextvars("request_id", "path")
+        response.headers.setdefault("X-Request-ID", request_id)
+        return response
+
+
+class BodySizeLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length is not None:
+            try:
+                if int(content_length) > _MAX_BODY_BYTES:
+                    return JSONResponse(
+                        status_code=413,
+                        content={
+                            "error": {
+                                "code": "payload_too_large",
+                                "message": f"request body exceeds {_MAX_BODY_BYTES} bytes",
+                            }
+                        },
+                    )
+            except ValueError:
+                pass
+        return await call_next(request)
+
+
 class ApiCORSMiddleware(BaseHTTPMiddleware):
     """Add CORS headers for /api/* routes only."""
 
@@ -87,6 +125,8 @@ def create_app() -> FastAPI:
     )
 
     app.add_middleware(ApiCORSMiddleware)
+    app.add_middleware(BodySizeLimitMiddleware)
+    app.add_middleware(RequestIdMiddleware)
 
     register_error_handlers(app)
     app.include_router(health_routes.router)

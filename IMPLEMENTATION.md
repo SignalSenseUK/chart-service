@@ -28,7 +28,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S19 | Browser exporter service | done | s19 | Playwright `connect_over_cdp` + `body[data-chart-ready="true"]` wait. |
 | S20 | Export API route | done | s20 | 4 export tests; PNG response with no-store; 404/422/502/504 paths. |
 | S21 | Dockerfile & Docker Compose | done | s21 | 4-service compose (app, postgres, browser, proxy); `docker compose config` validates. |
-| S22 | Reverse proxy & security hardening | pending | — | — |
+| S22 | Reverse proxy & security hardening | done | s22 | Caddy headers/limits; app request-id + 10 MB body limit; production error sanitization. |
 | S23 | Smoke tests & documentation | pending | — | — |
 
 ## Detailed Notes
@@ -180,6 +180,14 @@ following the steps defined in `specs/implementation_plan.md`.
 - Added an initial `Caddyfile` placeholder with TLS, gzip/zstd compression, static cache headers, and forwarded-IP wiring (rate limits + body-size are hardened in S22).
 - `docker compose config` validates the file shape locally. The app image build is not exercised in CI here.
 - Outstanding: real container build/run requires Docker daemon access; left to the deployment environment.
+
+### S22 — Reverse proxy & security hardening
+
+- Expanded the Caddyfile with security headers (`X-Content-Type-Options`, `Referrer-Policy`, HSTS, removed `Server`), `X-Frame-Options: SAMEORIGIN` on hosted pages, a 5 MB request-body limit on `/api/*`, static-asset caching, and reusable snippets. Added rate-limit snippets gated on the `caddy-ratelimit` module (commented imports so a stock Caddy build still loads); deployment notes call out the rate-limit module requirement.
+- Added two middlewares to the FastAPI app: `RequestIdMiddleware` (reuses incoming `X-Request-ID` or mints a v4 UUID, binds it onto every structlog log line, and echoes it back to the client), and `BodySizeLimitMiddleware` (returns 413 with the standard error envelope when `Content-Length > 10 MB`).
+- Added an unhandled-exception handler that emits "internal server error" when `APP_ENV == production` and the underlying class/message otherwise, so stack traces never leak in production. The error always carries the `internal_error` code.
+- Added 3 middleware tests. Suite at 84.
+
 
 
 

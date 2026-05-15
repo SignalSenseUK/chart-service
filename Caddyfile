@@ -9,21 +9,63 @@
     header -Server
 }
 
+(client_ip_forwarding) {
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-For {remote_host}
+    header_up X-Forwarded-Proto {scheme}
+}
+
+# Rate limits require the github.com/mholt/caddy-ratelimit module to be compiled into Caddy.
+# When that module is unavailable, comment out the @rate_create / @rate_png handlers and run
+# behind another rate-limiting layer (e.g. fail2ban, ufw, cloud provider WAF).
+(ratelimit_create) {
+    rate_limit {
+        zone create_post {
+            key {remote_host}
+            events 10
+            window 1m
+        }
+    }
+}
+
+(ratelimit_png) {
+    rate_limit {
+        zone png_export {
+            key {remote_host}
+            events 5
+            window 1m
+        }
+    }
+}
+
 charts.example.com {
     encode zstd gzip
 
     import security_headers
 
-    @png path /api/charts/*/png
+    # Hosted pages should not be framed cross-origin by default; embed page sets its own CSP at the app layer.
+    @hosted path /charts/*
+    header @hosted X-Frame-Options "SAMEORIGIN"
+
+    # 5 MB body limit on /api/* requests (app-level limit is 10 MB).
+    @api path /api/*
+    request_body @api {
+        max_size 5MB
+    }
+
+    # Rate-limit expensive routes.
     @create_post {
         method POST
         path /api/charts
     }
-    @api path /api/*
-
-    request_body @api {
-        max_size 5MB
+    @png_export {
+        method GET
+        path /api/charts/*/png
     }
+
+    # Uncomment the next two lines once caddy-ratelimit is built into the image.
+    # import ratelimit_create @create_post
+    # import ratelimit_png @png_export
 
     handle_path /static/* {
         header Cache-Control "public, max-age=86400, immutable"
@@ -31,8 +73,6 @@ charts.example.com {
     }
 
     reverse_proxy app:8000 {
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
+        import client_ip_forwarding
     }
 }

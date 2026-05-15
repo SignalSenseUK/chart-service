@@ -82,6 +82,24 @@ async def validation_exception_handler(
     return _error_response("invalid_request", message, _HTTP_422)
 
 
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.APP_ENV == "production":
+        message = "internal server error"
+    else:
+        message = f"{exc.__class__.__name__}: {exc}"
+    logger.error(
+        "unhandled.exception",
+        path=str(request.url.path),
+        error_type=exc.__class__.__name__,
+        error=str(exc),
+    )
+    return _error_response("internal_error", message, 500)
+
+
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(DomainError, domain_error_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(Exception, unhandled_exception_handler)
