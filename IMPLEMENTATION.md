@@ -13,7 +13,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S4 | Pydantic request/response schemas | done | s4 | 14 tests passing including discriminated range, source-mode rules, indicator wiring. |
 | S5 | Chart CRUD routes (create + get) | done | s5 | 18 tests passing; `POST /api/charts` and `GET /api/charts/{id}` wired with dependency-injected DB. |
 | S6 | Chart update, soft-delete, listing | done | s6 | 25 tests passing; PUT/DELETE/GET list endpoints with pagination + filter. |
-| S7 | Normalization service | pending | — | — |
+| S7 | Normalization service | done | s7 | 8 dedicated tests; sort/coerce/dup-reject + volume histogram extraction with up/down coloring. |
 | S8 | Indicator engine — SMA & EMA | pending | — | — |
 | S9 | Indicator engine — VWAP & Bollinger | pending | — | — |
 | S10 | Render-payload builder | pending | — | — |
@@ -81,6 +81,12 @@ following the steps defined in `specs/implementation_plan.md`.
 - Tightened direct-chart rule to require inline data on every non-indicator series.
 - Made the pagination test order-agnostic to dodge same-microsecond timestamp ties on SQLite.
 - 25 tests passing.
+
+### S7 — Normalization service
+
+- Added `app/domain/services/normalization_service.py` with `normalize_series` (OHLCV/OHLC/value formats: ascending sort, duplicate-date rejection, datetime-with-time rejection, numeric coercion) and `extract_volume_series` (histogram series with green/red up/down coloring, pane 1).
+- Added 8 tests covering each rule. Full suite now at 33 passes.
+
 
 
 
