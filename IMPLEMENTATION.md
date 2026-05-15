@@ -29,7 +29,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S20 | Export API route | done | s20 | 4 export tests; PNG response with no-store; 404/422/502/504 paths. |
 | S21 | Dockerfile & Docker Compose | done | s21 | 4-service compose (app, postgres, browser, proxy); `docker compose config` validates. |
 | S22 | Reverse proxy & security hardening | done | s22 | Caddy headers/limits; app request-id + 10 MB body limit; production error sanitization. |
-| S23 | Smoke tests & documentation | pending | — | — |
+| S23 | Smoke tests & documentation | done | s23 | End-to-end create/list/update/get/delete smoke; README authored. |
 
 ## Detailed Notes
 
@@ -187,6 +187,14 @@ following the steps defined in `specs/implementation_plan.md`.
 - Added two middlewares to the FastAPI app: `RequestIdMiddleware` (reuses incoming `X-Request-ID` or mints a v4 UUID, binds it onto every structlog log line, and echoes it back to the client), and `BodySizeLimitMiddleware` (returns 413 with the standard error envelope when `Content-Length > 10 MB`).
 - Added an unhandled-exception handler that emits "internal server error" when `APP_ENV == production` and the underlying class/message otherwise, so stack traces never leak in production. The error always carries the `internal_error` code.
 - Added 3 middleware tests. Suite at 84.
+
+### S23 — Smoke tests & documentation
+
+- Added `tests/test_smoke.py` exercising the full lifecycle through the FastAPI app (`/health` → create → get with EMA + volume → update → list → delete → 410).
+- Authored `README.md` covering quick start, API surface, environment variables, architecture diagram, local development, and backup guidance.
+- Existing `tests/conftest.py` already provided shared async fixtures (`app_with_db`, `client`); no additions needed.
+- Final suite: 85 passes.
+
 
 
 
