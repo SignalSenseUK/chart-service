@@ -1,0 +1,38 @@
+{
+    email admin@example.com
+}
+
+(security_headers) {
+    header X-Content-Type-Options "nosniff"
+    header Referrer-Policy "no-referrer"
+    header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    header -Server
+}
+
+charts.example.com {
+    encode zstd gzip
+
+    import security_headers
+
+    @png path /api/charts/*/png
+    @create_post {
+        method POST
+        path /api/charts
+    }
+    @api path /api/*
+
+    request_body @api {
+        max_size 5MB
+    }
+
+    handle_path /static/* {
+        header Cache-Control "public, max-age=86400, immutable"
+        reverse_proxy app:8000
+    }
+
+    reverse_proxy app:8000 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}

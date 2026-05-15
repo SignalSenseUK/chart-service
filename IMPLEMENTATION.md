@@ -27,7 +27,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S18 | IB adapter — normalization & wiring | done | s18 | 7 IB tests with mocked client; lifespan auto-connect when IB env vars present. |
 | S19 | Browser exporter service | done | s19 | Playwright `connect_over_cdp` + `body[data-chart-ready="true"]` wait. |
 | S20 | Export API route | done | s20 | 4 export tests; PNG response with no-store; 404/422/502/504 paths. |
-| S21 | Dockerfile & Docker Compose | pending | — | — |
+| S21 | Dockerfile & Docker Compose | done | s21 | 4-service compose (app, postgres, browser, proxy); `docker compose config` validates. |
 | S22 | Reverse proxy & security hardening | pending | — | — |
 | S23 | Smoke tests & documentation | pending | — | — |
 
@@ -172,6 +172,15 @@ following the steps defined in `specs/implementation_plan.md`.
 - Validates dimensions against `PNG_MIN/MAX_WIDTH/HEIGHT`, fetches the chart (404 if missing/410 if deleted via existing error handlers), and constructs the internal render URL using `BASE_URL` with `?export=true` so the frontend hides chrome.
 - On success: returns `image/png` with `Cache-Control: no-store` and updates `last_exported_at`. On `ExportTimeoutError`: 504. On `ExportConnectionError`: 502. Structured logs include chart id, dimensions, and duration.
 - Added 4 export tests (chart-missing 404, width-too-small 422, no-endpoint 502, mocked happy path returns PNG). Suite at 81.
+
+### S21 — Dockerfile & Docker Compose
+
+- Added `Dockerfile` (python:3.12-slim, non-root user, healthcheck on `/health`, ASGI factory entrypoint, no Chromium installed in app image).
+- Added `docker-compose.yml` with four services: `app`, `postgres:16-alpine` (with healthcheck), `browser` (browserless/chrome with 1G memory limit), and `proxy` (Caddy with mounted Caddyfile + persistent volumes).
+- Added an initial `Caddyfile` placeholder with TLS, gzip/zstd compression, static cache headers, and forwarded-IP wiring (rate limits + body-size are hardened in S22).
+- `docker compose config` validates the file shape locally. The app image build is not exercised in CI here.
+- Outstanding: real container build/run requires Docker daemon access; left to the deployment environment.
+
 
 
 

@@ -1,0 +1,68 @@
+services:
+  app:
+    build: .
+    env_file:
+      - .env
+    environment:
+      EXPORT_BROWSER_WS_ENDPOINT: ws://browser:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      browser:
+        condition: service_started
+    expose:
+      - "8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-chart}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chart}
+      POSTGRES_DB: ${POSTGRES_DB:-chart_db}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  browser:
+    image: browserless/chrome:1.61.1-puppeteer-21.4.1
+    environment:
+      MAX_CONCURRENT_SESSIONS: "2"
+      CONNECTION_TIMEOUT: "30000"
+      ENABLE_DEBUGGER: "false"
+    restart: unless-stopped
+    expose:
+      - "3000"
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  proxy:
+    image: caddy:2-alpine
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:
