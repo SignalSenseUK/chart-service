@@ -5,6 +5,8 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI
 
+from app.api.errors import register_error_handlers
+from app.api.routes import charts as charts_routes
 from app.api.routes import health as health_routes
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
@@ -38,6 +40,8 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    register_error_handlers(app)
     app.include_router(health_routes.router)
+    app.include_router(charts_routes.router)
 
     return app

@@ -11,7 +11,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S2 | Database setup & migrations | done | s2 | Alembic offline SQL renders the full schema; SQLite import test passes. |
 | S3 | ID generation & health endpoint | done | s3 | 6 unit/integration tests passing. |
 | S4 | Pydantic request/response schemas | done | s4 | 14 tests passing including discriminated range, source-mode rules, indicator wiring. |
-| S5 | Chart CRUD routes (create + get) | pending | — | — |
+| S5 | Chart CRUD routes (create + get) | done | s5 | 18 tests passing; `POST /api/charts` and `GET /api/charts/{id}` wired with dependency-injected DB. |
 | S6 | Chart update, soft-delete, listing | pending | — | — |
 | S7 | Normalization service | pending | — | — |
 | S8 | Indicator engine — SMA & EMA | pending | — | — |
@@ -64,6 +64,16 @@ following the steps defined in `specs/implementation_plan.md`.
 - Added `app/domain/schemas/chart_response.py` with create/list/error response models.
 - Added `app/domain/schemas/normalized_payload.py` (`PayloadMeta`, `PayloadSeries`, `NormalizedChartPayload`, `ChartGetResponse`).
 - Added `tests/test_chart_schemas.py` covering the cross-field rules. `pytest -q` reports 14 passes.
+
+### S5 — Chart CRUD routes (create + get)
+
+- Added `app/domain/services/chart_service.py` with `create_chart`/`get_chart` (plus update/delete/list helpers used by S6 next) and a `_split_definition` helper that stores inline series in the `inline_series` column keyed by series id.
+- Added `app/api/errors.py` with domain exceptions (`ChartNotFoundError`, `ChartDeletedError`, etc.), a JSON-shape error response handler, and a request-validation handler that returns `{ "error": { code, message } }`.
+- Added `app/api/dependencies.py` with FastAPI dependency wrappers.
+- Added `app/api/routes/charts.py` with `POST /api/charts` (returns view/embed/api URLs from `BASE_URL`) and `GET /api/charts/{id}` (raw definition + inline series; render-payload pipeline lands in S10).
+- Wired error handlers and chart router into `app/main.py`.
+- Added `tests/test_chart_crud.py` with positive/negative create/get coverage. Sidestepped the `HTTP_422_UNPROCESSABLE_ENTITY` deprecation by using the literal `422`. Suite is at 18 passing tests.
+
 
 
 
