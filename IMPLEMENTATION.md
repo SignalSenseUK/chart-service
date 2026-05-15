@@ -26,7 +26,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S17 | IB adapter — connection & fetch | done | s17 | `ib_async` adapter with pacing, lock, retry/backoff; import smoke-tested. |
 | S18 | IB adapter — normalization & wiring | done | s18 | 7 IB tests with mocked client; lifespan auto-connect when IB env vars present. |
 | S19 | Browser exporter service | done | s19 | Playwright `connect_over_cdp` + `body[data-chart-ready="true"]` wait. |
-| S20 | Export API route | pending | — | — |
+| S20 | Export API route | done | s20 | 4 export tests; PNG response with no-store; 404/422/502/504 paths. |
 | S21 | Dockerfile & Docker Compose | pending | — | — |
 | S22 | Reverse proxy & security hardening | pending | — | — |
 | S23 | Smoke tests & documentation | pending | — | — |
@@ -165,6 +165,14 @@ following the steps defined in `specs/implementation_plan.md`.
 - Added `app/exports/browser_exporter.py` with `BrowserExporter` (Playwright `connect_over_cdp` to the configured CDP websocket, wait for `body[data-chart-ready="true"]`, screenshot `#chart-container` or fall back to full page) and custom exceptions (`ExportConnectionError`, `ExportTimeoutError`, `ExportRenderError`).
 - Charts JS already toggles `body.export-mode` when `?export=true` is present in the URL (added in S11) so the screenshot can hide title/legend chrome.
 - One unit test for the "no endpoint configured" path; live sidecar exports cannot run in CI without browser/chrome. Suite at 77.
+
+### S20 — Export API route
+
+- Added `app/api/routes/exports.py` exposing `GET /api/charts/{id}/png?width&height`.
+- Validates dimensions against `PNG_MIN/MAX_WIDTH/HEIGHT`, fetches the chart (404 if missing/410 if deleted via existing error handlers), and constructs the internal render URL using `BASE_URL` with `?export=true` so the frontend hides chrome.
+- On success: returns `image/png` with `Cache-Control: no-store` and updates `last_exported_at`. On `ExportTimeoutError`: 504. On `ExportConnectionError`: 502. Structured logs include chart id, dimensions, and duration.
+- Added 4 export tests (chart-missing 404, width-too-small 422, no-endpoint 502, mocked happy path returns PNG). Suite at 81.
+
 
 
 

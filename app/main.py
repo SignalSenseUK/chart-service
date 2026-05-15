@@ -11,6 +11,7 @@ from starlette.responses import Response
 
 from app.api.errors import register_error_handlers
 from app.api.routes import charts as charts_routes
+from app.api.routes import exports as export_routes
 from app.api.routes import health as health_routes
 from app.api.routes import pages as page_routes
 from app.core.config import get_settings
@@ -90,6 +91,7 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
     app.include_router(health_routes.router)
     app.include_router(charts_routes.router)
+    app.include_router(export_routes.router)
     app.include_router(page_routes.router)
 
     static_dir = Path(__file__).resolve().parent / "web" / "static"
