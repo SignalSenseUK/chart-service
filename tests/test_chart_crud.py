@@ -170,6 +170,77 @@ async def test_list_charts_filters_by_source_kind(client) -> None:
 
 
 @pytest.mark.asyncio
+async def test_eodhd_chart_create_uses_validation_fetch(monkeypatch, client) -> None:
+    from datetime import date as _date
+
+    from app.providers.base import ProviderHealth, ProviderRequest, ProviderSeriesResult
+
+    calls: list[ProviderRequest] = []
+
+    class _FakeAdapter:
+        async def fetch_series(self, request: ProviderRequest) -> ProviderSeriesResult:
+            calls.append(request)
+            return ProviderSeriesResult(
+                data=[
+                    {"time": "2026-05-01", "open": 1, "high": 2, "low": 0.5, "close": 1.5, "volume": 1000},
+                ],
+                data_format="ohlcv",
+                warnings=[],
+            )
+
+        async def healthcheck(self) -> ProviderHealth:
+            return ProviderHealth(healthy=True)
+
+    monkeypatch.setattr(
+        "app.providers.registry.get_adapter",
+        lambda kind: _FakeAdapter() if kind == "eodhd" else (_ for _ in ()).throw(ValueError(kind)),
+    )
+    monkeypatch.setattr(
+        "app.domain.services.chart_service.get_adapter",
+        lambda kind: _FakeAdapter() if kind == "eodhd" else (_ for _ in ()).throw(ValueError(kind)),
+    )
+
+    payload = {
+        "source": {"kind": "eodhd"},
+        "instrument": {"symbol": "SPY", "asset_class": "equity"},
+        "range": {"mode": "fixed", "start_date": "2026-04-30", "end_date": "2026-05-01"},
+        "view": {"title": "EODHD chart"},
+        "series": [{"id": "price", "type": "candlestick", "pane": 0, "data_format": "ohlcv"}],
+    }
+    response = await client.post("/api/charts", json=payload)
+    assert response.status_code == 201, response.text
+    assert calls, "EODHD adapter was not invoked for validation fetch"
+    assert calls[0].start_date == _date(2026, 4, 30)
+
+
+@pytest.mark.asyncio
+async def test_eodhd_chart_create_rejects_when_provider_empty(monkeypatch, client) -> None:
+    from app.providers.base import ProviderHealth, ProviderRequest, ProviderSeriesResult
+
+    class _EmptyAdapter:
+        async def fetch_series(self, request: ProviderRequest) -> ProviderSeriesResult:
+            return ProviderSeriesResult(data=[], data_format="ohlcv")
+
+        async def healthcheck(self) -> ProviderHealth:
+            return ProviderHealth(healthy=True)
+
+    monkeypatch.setattr(
+        "app.domain.services.chart_service.get_adapter",
+        lambda kind: _EmptyAdapter(),
+    )
+
+    payload = {
+        "source": {"kind": "eodhd"},
+        "instrument": {"symbol": "SPY", "asset_class": "equity"},
+        "range": {"mode": "fixed", "start_date": "2026-04-30", "end_date": "2026-05-01"},
+        "series": [{"id": "price", "type": "candlestick", "pane": 0, "data_format": "ohlcv"}],
+    }
+    response = await client.post("/api/charts", json=payload)
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "provider_empty"
+
+
+@pytest.mark.asyncio
 async def test_get_chart_with_indicator_series(client) -> None:
     payload = _direct_payload()
     payload["series"][0]["data"] = [

@@ -22,7 +22,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S13 | Embed page & CORS/CSP headers | done | s13 | `/embed/{id}` with `frame-ancestors *`; custom CORS middleware for `/api/*`. |
 | S14 | Provider base interface & direct adapter | done | s14 | Adapter Protocol; DirectAdapter; render builder dispatches through registry. |
 | S15 | Range resolver | done | s15 | 8 dedicated tests; d/w/m/y lookback, month clamp, year subtract. |
-| S16 | EODHD adapter | pending | — | — |
+| S16 | EODHD adapter | done | s16 | 6 adapter tests + 2 integration tests; validation fetch on create. |
 | S17 | IB adapter — connection & fetch | pending | — | — |
 | S18 | IB adapter — normalization & wiring | pending | — | — |
 | S19 | Browser exporter service | pending | — | — |
@@ -138,6 +138,14 @@ following the steps defined in `specs/implementation_plan.md`.
 
 - Implemented `resolve_range` with fixed-mode ISO parsing and relative-mode d/w/m/y lookback. Month subtraction clamps day-of-month overflow (e.g. Mar 31 - 1m → Feb 28).
 - `_today()` is a module-level seam so tests can monkeypatch deterministically. 8 tests added; full suite at 61 passes.
+
+### S16 — EODHD adapter
+
+- Added `app/providers/eodhd.py` implementing `MarketDataAdapter` with EOD historical fetch, httpx-based HTTP, 4xx → 422, 5xx → 502, and a "short range" warning. Adapter exposes a `_client_factory` seam so tests can pass an `httpx.MockTransport`.
+- Validation fetch added to `chart_service.create_chart` for any non-direct source: range is resolved, adapter is called, and an empty result is rejected with `provider_empty`/422.
+- 6 EODHD unit tests using mocked transports plus 2 integration tests covering create-with-validation and provider-empty rejection. Suite at 69 passes.
+- Outstanding: real EODHD calls are not exercised in CI; a smoke test against a sandbox key can be added later if desired.
+
 
 
 

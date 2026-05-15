@@ -6,10 +6,18 @@ from typing import Any, Optional, Sequence
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.errors import ChartDeletedError, ChartNotFoundError
+from app.api.errors import (
+    ChartDeletedError,
+    ChartNotFoundError,
+    ChartValidationError,
+    ProviderError,
+)
 from app.core.ids import generate_chart_id
 from app.db.models import Chart
 from app.domain.schemas.chart_request import ChartCreateRequest
+from app.domain.services.range_resolver import resolve_range
+from app.providers.base import ProviderRequest
+from app.providers.registry import get_adapter
 
 
 def _split_definition(
@@ -32,7 +40,46 @@ def _split_definition(
     return payload, (inline_series or None)
 
 
+async def _validate_provider_fetch(request: ChartCreateRequest) -> None:
+    if request.source.kind == "direct":
+        return
+    if request.range is None:
+        raise ChartValidationError(
+            "provider-backed charts require a 'range'",
+            code="missing_range",
+        )
+    range_cfg = request.range.model_dump(mode="json")
+    try:
+        start_date, end_date = resolve_range(range_cfg)
+    except ValueError as exc:
+        raise ChartValidationError(str(exc), code="invalid_range") from exc
+
+    adapter = get_adapter(request.source.kind)
+    provider_request = ProviderRequest(
+        symbol=request.instrument.symbol,
+        asset_class=request.instrument.asset_class,
+        start_date=start_date,
+        end_date=end_date,
+        series_id="__validation__",
+        data_format="ohlcv",
+        provider_config=(request.source.provider_config or {}),
+    )
+    try:
+        result = await adapter.fetch_series(provider_request)
+    except (ChartValidationError, ProviderError):
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise ProviderError(f"provider validation failed: {exc}") from exc
+
+    if not result.data:
+        raise ChartValidationError(
+            "provider returned no data for the requested symbol and range",
+            code="provider_empty",
+        )
+
+
 async def create_chart(db: AsyncSession, request: ChartCreateRequest) -> Chart:
+    await _validate_provider_fetch(request)
     definition, inline_series = _split_definition(request)
     chart = Chart(
         id=generate_chart_id(),
