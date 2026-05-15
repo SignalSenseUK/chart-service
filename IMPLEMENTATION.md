@@ -17,7 +17,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S8 | Indicator engine — SMA & EMA | done | s8 | 7 dedicated tests; rolling SMA, EMA with SMA seed, dispatcher. |
 | S9 | Indicator engine — VWAP & Bollinger | done | s9 | 5 added indicator tests; cumulative VWAP and Bollinger upper/middle/lower with population stddev. |
 | S10 | Render-payload builder | done | s10 | Builder normalizes, computes indicators, emits volume histogram, and updates last_rendered_at. |
-| S11 | Static assets & JS renderer | pending | — | — |
+| S11 | Static assets & JS renderer | done | s11 | charts.js + charts.css; node --check passes; chart-ready signal wired. |
 | S12 | Hosted chart page | pending | — | — |
 | S13 | Embed page & CORS/CSP headers | pending | — | — |
 | S14 | Provider base interface & direct adapter | pending | — | — |
@@ -105,6 +105,14 @@ following the steps defined in `specs/implementation_plan.md`.
 - `GET /api/charts/{id}` now returns `ChartGetResponse` (`id`, `title`, `source_kind`, `instrument`, `payload`) and updates `last_rendered_at`.
 - Updated `test_get_chart_returns_payload` to assert against the new shape and added `test_get_chart_with_indicator_series` covering SMA derivation. Suite now at 46 passes.
 - Outstanding: provider-backed flows (S14+) will replace the inline-data lookup with adapter dispatch; the builder is structured so this swap is local to series-iteration step 1.
+
+### S11 — Static assets & JS renderer
+
+- Added `app/web/static/charts.js` exposing `window.ChartService.render(chartId, apiBase)` which fetches the normalized payload, applies a dark/light palette, dispatches by series type (candlestick, bar, line, area, histogram), reduces volume pane via `priceScale("volume").scaleMargins`, sets a ResizeObserver, and emits `document.body.dataset.chartReady = "true"` on next animation frame.
+- Added `app/web/static/charts.css` with full-viewport flex layout, error overlay styling, and `body.embed`/`body.export-mode` overrides for chrome stripping.
+- Verified syntax with `node --check`.
+- Outstanding: visual rendering will be exercised in S12 (hosted page) and S19 (Playwright export).
+
 
 
 
