@@ -35,20 +35,24 @@ async def test_create_chart_returns_urls(client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_chart_returns_definition(client) -> None:
+async def test_get_chart_returns_payload(client) -> None:
     create = await client.post("/api/charts", json=_direct_payload())
     chart_id = create.json()["id"]
 
     response = await client.get(f"/api/charts/{chart_id}")
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     body = response.json()
     assert body["id"] == chart_id
     assert body["title"] == "SPY Daily"
     assert body["source_kind"] == "direct"
-    assert body["inline_series"]["price"]["data_format"] == "ohlcv"
-    assert len(body["inline_series"]["price"]["data"]) == 2
-    # inline data should be stripped from chart_definition
-    assert "data" not in body["chart_definition"]["series"][0]
+    assert body["instrument"]["symbol"] == "SPY"
+    series = body["payload"]["series"]
+    price = next(s for s in series if s["id"] == "price")
+    assert price["type"] == "candlestick"
+    assert len(price["data"]) == 2
+    volume = next(s for s in series if s["id"].endswith("__volume"))
+    assert volume["type"] == "histogram"
+    assert volume["pane"] == 1
 
 
 @pytest.mark.asyncio
@@ -163,3 +167,31 @@ async def test_list_charts_filters_by_source_kind(client) -> None:
     body = response.json()
     assert body["total"] == 0
     assert body["charts"] == []
+
+
+@pytest.mark.asyncio
+async def test_get_chart_with_indicator_series(client) -> None:
+    payload = _direct_payload()
+    payload["series"][0]["data"] = [
+        {"time": f"2026-05-{i + 1:02d}", "open": i, "high": i + 1, "low": i - 1, "close": i, "volume": 1000}
+        for i in range(1, 6)
+    ]
+    payload["series"].append(
+        {
+            "id": "sma3",
+            "type": "line",
+            "pane": 0,
+            "indicator": {"name": "sma", "length": 3, "source_series": "price"},
+        }
+    )
+    create = await client.post("/api/charts", json=payload)
+    assert create.status_code == 201, create.text
+    chart_id = create.json()["id"]
+
+    response = await client.get(f"/api/charts/{chart_id}")
+    body = response.json()
+    series_by_id = {s["id"]: s for s in body["payload"]["series"]}
+    assert "price" in series_by_id
+    assert "sma3" in series_by_id
+    assert len(series_by_id["sma3"]["data"]) == 3
+    assert series_by_id["sma3"]["data"][0]["time"] == "2026-05-04"

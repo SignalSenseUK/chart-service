@@ -16,7 +16,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S7 | Normalization service | done | s7 | 8 dedicated tests; sort/coerce/dup-reject + volume histogram extraction with up/down coloring. |
 | S8 | Indicator engine — SMA & EMA | done | s8 | 7 dedicated tests; rolling SMA, EMA with SMA seed, dispatcher. |
 | S9 | Indicator engine — VWAP & Bollinger | done | s9 | 5 added indicator tests; cumulative VWAP and Bollinger upper/middle/lower with population stddev. |
-| S10 | Render-payload builder | pending | — | — |
+| S10 | Render-payload builder | done | s10 | Builder normalizes, computes indicators, emits volume histogram, and updates last_rendered_at. |
 | S11 | Static assets & JS renderer | pending | — | — |
 | S12 | Hosted chart page | pending | — | — |
 | S13 | Embed page & CORS/CSP headers | pending | — | — |
@@ -97,6 +97,15 @@ following the steps defined in `specs/implementation_plan.md`.
 
 - Extended `indicator_service.py` with `compute_vwap` (cumulative typical*volume/volume; raises if any bar is missing OHLCV fields) and `compute_bollinger` (population stddev over the rolling window, selectable band).
 - Dispatcher updated to route `vwap` and `bollinger`. Suite now at 45 passes.
+
+### S10 — Render-payload builder
+
+- Added `app/domain/services/render_payload_service.py` (`build_payload_from_definition` + async wrapper).
+- First pass normalizes non-indicator series via `normalize_series`. Second pass computes indicators against the already-normalized source bars; missing-source references raise `ChartValidationError` (422). Third pass emits a volume histogram for the first OHLC/bar series whose normalized bars include `volume`.
+- `GET /api/charts/{id}` now returns `ChartGetResponse` (`id`, `title`, `source_kind`, `instrument`, `payload`) and updates `last_rendered_at`.
+- Updated `test_get_chart_returns_payload` to assert against the new shape and added `test_get_chart_with_indicator_series` covering SMA derivation. Suite now at 46 passes.
+- Outstanding: provider-backed flows (S14+) will replace the inline-data lookup with adapter dispatch; the builder is structured so this swap is local to series-iteration step 1.
+
 
 
 

@@ -14,7 +14,8 @@ from app.domain.schemas.chart_response import (
     ChartListResponse,
     ChartSummary,
 )
-from app.domain.services import chart_service
+from app.domain.schemas.normalized_payload import ChartGetResponse
+from app.domain.services import chart_service, render_payload_service
 
 router = APIRouter(prefix="/api/charts", tags=["charts"])
 
@@ -66,19 +67,22 @@ async def list_charts(
     )
 
 
-@router.get("/{chart_id}")
+@router.get("/{chart_id}", response_model=ChartGetResponse)
 async def get_chart(
     chart_id: str,
     db: AsyncSession = Depends(db_session),
-) -> dict:
+) -> ChartGetResponse:
     chart = await chart_service.get_chart(db, chart_id)
-    return {
-        "id": chart.id,
-        "title": chart.title,
-        "source_kind": chart.source_kind,
-        "chart_definition": chart.chart_definition,
-        "inline_series": chart.inline_series,
-    }
+    payload = await render_payload_service.build_payload(chart)
+    await chart_service.touch_rendered(db, chart)
+    instrument = (chart.chart_definition or {}).get("instrument", {}) or {}
+    return ChartGetResponse(
+        id=chart.id,
+        title=chart.title,
+        source_kind=chart.source_kind,
+        instrument=instrument,
+        payload=payload,
+    )
 
 
 @router.put("/{chart_id}", response_model=ChartCreateResponse)
