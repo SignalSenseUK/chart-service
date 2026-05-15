@@ -25,7 +25,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S16 | EODHD adapter | done | s16 | 6 adapter tests + 2 integration tests; validation fetch on create. |
 | S17 | IB adapter — connection & fetch | done | s17 | `ib_async` adapter with pacing, lock, retry/backoff; import smoke-tested. |
 | S18 | IB adapter — normalization & wiring | done | s18 | 7 IB tests with mocked client; lifespan auto-connect when IB env vars present. |
-| S19 | Browser exporter service | pending | — | — |
+| S19 | Browser exporter service | done | s19 | Playwright `connect_over_cdp` + `body[data-chart-ready="true"]` wait. |
 | S20 | Export API route | pending | — | — |
 | S21 | Dockerfile & Docker Compose | pending | — | — |
 | S22 | Reverse proxy & security hardening | pending | — | — |
@@ -159,6 +159,13 @@ following the steps defined in `specs/implementation_plan.md`.
 - IB adapter was already routed through the lazy registry in S14. S18 hardens normalization (handles `BarData`-like objects via `getattr`, strips time-of-day from dates, sorts ascending, filters bars before the requested start), and confirms the validation fetch path in `chart_service.create_chart` reuses the same adapter.
 - Updated `app/main.py` lifespan to lazily connect to IB on startup when `IB_HOST`/`IB_PORT`/`IB_CLIENT_ID` are all set, and to disconnect on shutdown. Connection failure is logged but does not block app startup.
 - Added 7 IB tests (sec-type mapping, duration string, date parsing, bar normalization, contract building, missing-config rejection, end-to-end fetch through a fake IB client). Full suite at 76 passes.
+
+### S19 — Browser exporter service
+
+- Added `app/exports/browser_exporter.py` with `BrowserExporter` (Playwright `connect_over_cdp` to the configured CDP websocket, wait for `body[data-chart-ready="true"]`, screenshot `#chart-container` or fall back to full page) and custom exceptions (`ExportConnectionError`, `ExportTimeoutError`, `ExportRenderError`).
+- Charts JS already toggles `body.export-mode` when `?export=true` is present in the URL (added in S11) so the screenshot can hide title/legend chrome.
+- One unit test for the "no endpoint configured" path; live sidecar exports cannot run in CI without browser/chrome. Suite at 77.
+
 
 
 
