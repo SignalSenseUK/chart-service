@@ -4,8 +4,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from app.api.errors import register_error_handlers
 from app.api.routes import charts as charts_routes
@@ -32,6 +34,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("application.shutdown")
 
 
+class ApiCORSMiddleware(BaseHTTPMiddleware):
+    """Add CORS headers for /api/* routes only."""
+
+    async def dispatch(self, request: Request, call_next):
+        is_api = request.url.path.startswith("/api/")
+        if is_api and request.method == "OPTIONS":
+            return Response(
+                status_code=204,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "Access-Control-Allow-Headers": request.headers.get(
+                        "access-control-request-headers", "*"
+                    ),
+                    "Access-Control-Max-Age": "600",
+                },
+            )
+        response = await call_next(request)
+        if is_api:
+            response.headers.setdefault("Access-Control-Allow-Origin", "*")
+        return response
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     setup_logging(settings.LOG_LEVEL)
@@ -42,6 +67,8 @@ def create_app() -> FastAPI:
         description="Self-hosted chart rendering service.",
         lifespan=lifespan,
     )
+
+    app.add_middleware(ApiCORSMiddleware)
 
     register_error_handlers(app)
     app.include_router(health_routes.router)

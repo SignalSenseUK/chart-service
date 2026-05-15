@@ -80,3 +80,21 @@ async def hosted_chart_page(
         db=db,
         settings=settings,
     )
+
+
+@router.get("/embed/{chart_id}", response_class=HTMLResponse)
+async def embed_chart_page(
+    chart_id: str,
+    request: Request,
+    db: AsyncSession = Depends(db_session),
+    settings: Settings = Depends(get_settings),
+) -> HTMLResponse:
+    return await _render_chart_page(
+        request,
+        chart_id,
+        "embed.html",
+        body_class="embed",
+        db=db,
+        settings=settings,
+        extra_headers={"Content-Security-Policy": "frame-ancestors *"},
+    )

@@ -49,3 +49,40 @@ async def test_hosted_chart_410(client) -> None:
     response = await client.get(f"/charts/{created['id']}")
     assert response.status_code == 410
     assert "removed" in response.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_embed_chart_page_has_frame_ancestors(client) -> None:
+    created = (await client.post("/api/charts", json=_direct_payload())).json()
+
+    response = await client.get(f"/embed/{created['id']}")
+    assert response.status_code == 200
+    assert response.headers.get("content-security-policy") == "frame-ancestors *"
+    assert "chart-title" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_api_routes_have_cors_header(client) -> None:
+    response = await client.get("/api/charts")
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "*"
+
+
+@pytest.mark.asyncio
+async def test_api_options_preflight(client) -> None:
+    response = await client.options(
+        "/api/charts",
+        headers={
+            "Origin": "https://example.com",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert response.status_code == 204
+    assert response.headers.get("access-control-allow-origin") == "*"
+
+
+@pytest.mark.asyncio
+async def test_hosted_chart_page_has_no_cors_header(client) -> None:
+    created = (await client.post("/api/charts", json=_direct_payload())).json()
+    response = await client.get(f"/charts/{created['id']}")
+    assert "access-control-allow-origin" not in (k.lower() for k in response.headers)

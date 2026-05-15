@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <meta name="referrer" content="no-referrer" />
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/charts.css" />
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js" crossorigin="anonymous"></script>
+</head>
+<body class="{{ body_class }}">
+  <div class="chart-page">
+    <div id="chart-container"></div>
+  </div>
+  <script src="/static/charts.js"></script>
+  <script>
+    (function () {
+      const chartId = {{ chart_id_json | safe }};
+      const apiBase = {{ api_base_json | safe }};
+      window.ChartService.applyExportMode();
+      window.ChartService.render(chartId, apiBase);
+    })();
+  </script>
+</body>
+</html>

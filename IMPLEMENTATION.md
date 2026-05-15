@@ -19,7 +19,7 @@ following the steps defined in `specs/implementation_plan.md`.
 | S10 | Render-payload builder | done | s10 | Builder normalizes, computes indicators, emits volume histogram, and updates last_rendered_at. |
 | S11 | Static assets & JS renderer | done | s11 | charts.js + charts.css; node --check passes; chart-ready signal wired. |
 | S12 | Hosted chart page | done | s12 | Jinja2 templates; 3 page tests; static mount on `/static`. |
-| S13 | Embed page & CORS/CSP headers | pending | — | — |
+| S13 | Embed page & CORS/CSP headers | done | s13 | `/embed/{id}` with `frame-ancestors *`; custom CORS middleware for `/api/*`. |
 | S14 | Provider base interface & direct adapter | pending | — | — |
 | S15 | Range resolver | pending | — | — |
 | S16 | EODHD adapter | pending | — | — |
@@ -119,6 +119,13 @@ following the steps defined in `specs/implementation_plan.md`.
 - Added `app/api/routes/pages.py` with `GET /charts/{id}` plus a shared `_render_chart_page` helper that handles 404/410.
 - Mounted `/static` in `create_app` so `charts.js`/`charts.css` are served by the app.
 - Tests cover the 200/404/410 paths. Full suite at 49 passes.
+
+### S13 — Embed page & CORS/CSP headers
+
+- Added `embed.html` (no title bar) and `GET /embed/{id}` route that returns `Content-Security-Policy: frame-ancestors *`.
+- Implemented a small `ApiCORSMiddleware` that only fires for `/api/*` (sets `Access-Control-Allow-Origin: *` and answers preflight `OPTIONS`). Hosted/embed pages remain same-origin by default.
+- Tests cover both header contracts and verify the hosted page does not get the CORS header. Suite at 53 passes.
+
 
 
 
