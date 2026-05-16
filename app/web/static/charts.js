@@ -168,7 +168,6 @@
           borderColor: palette.border,
           timeVisible: false,
           fixLeftEdge: true,
-          fixRightEdge: true,
         },
         rightPriceScale: { borderColor: palette.border },
       });
@@ -232,6 +231,12 @@
 
       chart.subscribeCrosshairMove(updateLegend);
       updateLegend({}); // Initial populate
+
+      // Explicitly set dimensions before fitting to avoid layout padding
+      chart.applyOptions({
+        width: container.clientWidth,
+        height: container.clientHeight,
+      });
 
       chart.timeScale().fitContent();
 
