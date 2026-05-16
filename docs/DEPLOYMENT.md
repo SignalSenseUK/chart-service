@@ -34,7 +34,13 @@ The Chart Service is designed to be self-hosted via Docker Compose, utilizing a 
    docker compose up -d
    ```
 
-5. **Verify:**
+5. **Initialize Database:**
+   Once the containers are running, apply the initial database migrations:
+   ```bash
+   docker exec -it chart_app alembic upgrade head
+   ```
+
+6. **Verify:**
    Navigate to `https://<your-domain>/health` in your browser. You should receive an `ok` status indicating the application and database are successfully connected.
 
 ## Architecture Security & Hardening
@@ -49,10 +55,10 @@ The provided `docker-compose.yml` and `Caddyfile` include several best practices
 ## Database Migrations & Backups
 
 ### Migrations
-When upgrading the chart-service version, you may need to apply database schema updates using Alembic. You can run migrations against the Postgres container:
+When upgrading the chart-service version, you may need to apply database schema updates using Alembic. You can run migrations via the app container:
 
 ```bash
-docker exec -it chart-app .venv/bin/alembic upgrade head
+docker exec -it chart_app alembic upgrade head
 ```
 *(Ensure the exact container name matches what is defined in your compose stack)*
 
