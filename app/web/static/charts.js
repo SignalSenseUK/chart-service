@@ -115,12 +115,14 @@
         break;
       }
       default:
-        return;
+        return null;
     }
 
     if (handle && data.length > 0) {
       handle.setData(data);
     }
+    
+    return { handle, series };
   }
 
   async function render(chartId, apiBase) {
@@ -175,9 +177,59 @@
         return;
       }
 
+      const seriesList = [];
       for (const series of allSeries) {
-        addSeries(chart, series, theme);
+        const item = addSeries(chart, series, theme);
+        if (item) seriesList.push(item);
       }
+
+      const legend = document.createElement("div");
+      legend.className = "chart-legend";
+      container.appendChild(legend);
+
+      function updateLegend(param) {
+        const validCrosshair = param && param.time && param.point &&
+                               param.point.x >= 0 && param.point.x <= container.clientWidth &&
+                               param.point.y >= 0 && param.point.y <= container.clientHeight;
+        
+        let html = '';
+        for (const item of seriesList) {
+          if (!item.handle) continue;
+          
+          let val = "N/A";
+          let color = item.series.style?.color || palette.text;
+          
+          if (validCrosshair) {
+            const data = param.seriesData.get(item.handle);
+            if (data) {
+              if (item.series.type === "candlestick" || item.series.type === "bar") {
+                val = `O: ${data.open} H: ${data.high} L: ${data.low} C: ${data.close}`;
+              } else {
+                val = data.value !== undefined ? data.value : "N/A";
+              }
+            }
+          } else {
+            const dataArr = item.series.data || [];
+            if (dataArr.length > 0) {
+               const last = dataArr[dataArr.length - 1];
+               if (item.series.type === "candlestick" || item.series.type === "bar") {
+                 val = `O: ${last.open} H: ${last.high} L: ${last.low} C: ${last.close}`;
+               } else {
+                 val = last.value !== undefined ? last.value : (last.close !== undefined ? last.close : "N/A");
+               }
+            }
+          }
+          
+          const name = item.series.title || item.series.id || item.series.type;
+          html += `<div class="chart-legend-item" style="color: ${color}">
+            <span class="chart-legend-title">${name}</span><span>${val}</span>
+          </div>`;
+        }
+        legend.innerHTML = html;
+      }
+
+      chart.subscribeCrosshairMove(updateLegend);
+      updateLegend({}); // Initial populate
 
       chart.timeScale().fitContent();
 

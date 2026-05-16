@@ -67,6 +67,30 @@ body.embed {
   background: transparent;
 }
 
+.chart-legend {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 10;
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+.chart-legend-item {
+  margin-bottom: 4px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+body.theme-light .chart-legend-item {
+  text-shadow: 0 1px 2px rgba(255,255,255,0.8);
+}
+
+.chart-legend-title {
+  font-weight: 600;
+  margin-right: 4px;
+}
+
 @media (max-width: 640px) {
   #chart-title {
     font-size: 12px;
