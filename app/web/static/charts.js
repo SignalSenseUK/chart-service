@@ -187,9 +187,9 @@
       });
       ro.observe(container);
 
-      requestAnimationFrame(() => {
+      setTimeout(() => {
         document.body.dataset.chartReady = "true";
-      });
+      }, 250);
     } catch (err) {
       showError(container, `Failed to load chart: ${err.message || err}`);
     }

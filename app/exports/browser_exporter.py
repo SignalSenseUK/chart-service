@@ -73,11 +73,7 @@ class BrowserExporter:
                                 "chart-ready signal not received before timeout"
                             ) from exc
 
-                        container = await page.query_selector("#chart-container")
-                        if container is None:
-                            png = await page.screenshot(type="png", full_page=False)
-                        else:
-                            png = await container.screenshot(type="png")
+                        png = await page.screenshot(type="png", full_page=False)
                         return png
                     finally:
                         await page.close()

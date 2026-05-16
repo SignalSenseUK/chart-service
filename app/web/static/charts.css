@@ -57,13 +57,11 @@ body.theme-light .chart-error {
   border-color: #d8d8d8;
 }
 
-body.embed #chart-title,
-body.export-mode #chart-title {
+body.embed #chart-title {
   display: none;
 }
 
-body.embed,
-body.export-mode {
+body.embed {
   background: transparent;
 }
 
