@@ -1,7 +1,6 @@
 # Implementation Log
 
-This document tracks the implementation progress of the self-hosted chart service
-following the steps defined in `specs/implementation_plan.md`.
+This document tracks the initial implementation progress of the self-hosted chart service.
 
 ## Status Overview
 
@@ -199,7 +198,7 @@ following the steps defined in `specs/implementation_plan.md`.
 
 - Test suite: **85 / 85 passing** (`.venv/bin/pytest`).
 - Every step S1–S23 was committed as its own commit on `main` and pushed to `origin/main`.
-- Acceptance criteria (cross-referenced against `specs/self_hosted_chart_service_spec.md` §Acceptance Criteria):
+- Acceptance criteria:
   1. Direct charts: create / update / soft-delete / list / get / hosted render — covered by S5/S6/S12 + tests.
   2. EODHD provider with fixed and relative ranges — covered by S15/S16 (live calls require a real key).
   3. IB provider via `ib_async` — covered by S17/S18 (live runs require IB Gateway).
