@@ -151,6 +151,8 @@
       }
 
       const chart = LightweightCharts.createChart(container, {
+        width: container.clientWidth,
+        height: container.clientHeight,
         autoSize: true,
         layout: {
           background: { color: palette.background },
@@ -179,15 +181,8 @@
 
       chart.timeScale().fitContent();
 
-      const ro = new ResizeObserver(() => {
-        chart.applyOptions({
-          width: container.clientWidth,
-          height: container.clientHeight,
-        });
-      });
-      ro.observe(container);
-
       setTimeout(() => {
+        chart.resize(container.clientWidth, container.clientHeight);
         document.body.dataset.chartReady = "true";
       }, 250);
     } catch (err) {
