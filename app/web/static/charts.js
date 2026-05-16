@@ -231,24 +231,21 @@
       chart.subscribeCrosshairMove(updateLegend);
       updateLegend({}); // Initial populate
 
-      const isExport = document.body.classList.contains("export-mode");
-      if (isExport) {
-        // Wait for DOM layout to fully settle (e.g. scrollbars disappearing)
-        setTimeout(() => {
-          chart.resize(container.clientWidth, container.clientHeight);
-          chart.timeScale().fitContent();
-          
-          // Wait for canvas to paint the new fitted bounds
-          setTimeout(() => {
-            document.body.dataset.chartReady = "true";
-          }, 150);
-        }, 100);
-      } else {
-        chart.timeScale().fitContent();
+      // Explicitly set dimensions before fitting to avoid layout padding
+      chart.applyOptions({
+        width: container.clientWidth,
+        height: container.clientHeight,
+      });
+
+      chart.timeScale().fitContent();
+
+      // Use double-rAF to give the browser engine an explicit paint cycle 
+      // to settle layout and internal observers before signaling ready.
+      requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           document.body.dataset.chartReady = "true";
         });
-      }
+      });
     } catch (err) {
       showError(container, `Failed to load chart: ${err.message || err}`);
     }
