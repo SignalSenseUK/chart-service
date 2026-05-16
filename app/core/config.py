@@ -34,6 +34,10 @@ class Settings(BaseSettings):
         default="http://localhost:8000",
         description="Public base URL used when constructing chart URLs.",
     )
+    INTERNAL_BASE_URL: str = Field(
+        default="http://app:8000",
+        description="Internal base URL for headless browser export rendering.",
+    )
     APP_ENV: Literal["development", "staging", "production"] = "development"
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 

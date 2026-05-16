@@ -23,7 +23,7 @@ logger = get_logger("app.api.exports")
 
 
 def _internal_render_url(settings: Settings, chart_id: str) -> str:
-    base = settings.BASE_URL.rstrip("/")
+    base = settings.INTERNAL_BASE_URL.rstrip("/")
     return f"{base}/charts/{chart_id}?export=true"
 
 

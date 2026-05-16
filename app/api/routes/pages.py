@@ -20,6 +20,8 @@ templates = Jinja2Templates(directory=str(_TEMPLATE_DIR))
 
 
 def _api_base(settings: Settings, request: Request) -> str:
+    if request.query_params.get("export") == "true":
+        return settings.INTERNAL_BASE_URL.rstrip("/")
     if settings.BASE_URL:
         return settings.BASE_URL.rstrip("/")
     return str(request.base_url).rstrip("/")
