@@ -231,12 +231,24 @@
       chart.subscribeCrosshairMove(updateLegend);
       updateLegend({}); // Initial populate
 
-      chart.resize(container.clientWidth, container.clientHeight);
-      chart.timeScale().fitContent();
-
-      setTimeout(() => {
-        document.body.dataset.chartReady = "true";
-      }, 250);
+      const isExport = document.body.classList.contains("export-mode");
+      if (isExport) {
+        // Wait for DOM layout to fully settle (e.g. scrollbars disappearing)
+        setTimeout(() => {
+          chart.resize(container.clientWidth, container.clientHeight);
+          chart.timeScale().fitContent();
+          
+          // Wait for canvas to paint the new fitted bounds
+          setTimeout(() => {
+            document.body.dataset.chartReady = "true";
+          }, 150);
+        }, 100);
+      } else {
+        chart.timeScale().fitContent();
+        requestAnimationFrame(() => {
+          document.body.dataset.chartReady = "true";
+        });
+      }
     } catch (err) {
       showError(container, `Failed to load chart: ${err.message || err}`);
     }
