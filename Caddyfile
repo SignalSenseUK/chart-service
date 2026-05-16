@@ -67,7 +67,7 @@ charts.example.com {
     # import ratelimit_create @create_post
     # import ratelimit_png @png_export
 
-    handle_path /static/* {
+    handle /static/* {
         header Cache-Control "public, max-age=86400, immutable"
         reverse_proxy app:8000
     }
