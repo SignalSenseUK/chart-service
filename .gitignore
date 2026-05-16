@@ -29,3 +29,6 @@ env/
 
 # logs
 *.log
+
+# data
+data/
