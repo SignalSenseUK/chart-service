@@ -76,6 +76,14 @@ pytest -q
 We welcome contributions! Please follow standard fork-and-pull-request workflows.
 Ensure that your code passes all tests (`pytest`) and formatters before submitting. 
 
+## ⚖️ Attribution
+
+This product includes software developed by [TradingView, Inc.](https://www.tradingview.com/).
+The frontend leverages [TradingView Lightweight Charts™](https://tradingview.github.io/lightweight-charts/), which is licensed under the Apache License, Version 2.0.
+
+> TradingView Lightweight Charts™
+> Copyright (с) 2025 TradingView, Inc. https://www.tradingview.com/
+
 ## 📝 License
 
 This project is licensed under the MIT License - see the `pyproject.toml` file for details.
