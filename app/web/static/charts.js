@@ -231,10 +231,9 @@
       chart.subscribeCrosshairMove(updateLegend);
       updateLegend({}); // Initial populate
 
-      chart.timeScale().fitContent();
-
       setTimeout(() => {
         chart.resize(container.clientWidth, container.clientHeight);
+        chart.timeScale().fitContent();
         document.body.dataset.chartReady = "true";
       }, 250);
     } catch (err) {
